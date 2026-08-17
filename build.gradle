@@ -1452,7 +1452,21 @@ def createOfbizCommandTask(taskName, arguments) {
         // src/main/* (and so out of sourceSets.main) to keep them out of release artifacts; this
         // task is a local dev-run launcher, never a release-packaging task, so widening its
         // classpath here doesn't reintroduce test code into anything that gets distributed.
-        classpath = sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath
+        // The Allure JUnit5 adapter (see the allure {} block's frameworks.junit5, configured above
+        // for gradlew test) registers itself via JUnit Platform's ServiceLoader mechanism for ANY
+        // Launcher.execute() call in a JVM that has it on the classpath - not just Gradle's own
+        // 'test' task. Left in, this JVM's JupiterTestExtension.JupiterClassRunner (which makes its
+        // own internal Launcher.execute() call to run Jupiter-based integration test suites) would
+        // trigger it too, and it happens to read the same allure.results.directory system property
+        // AllureSuiteReportSink's own opt-in flag uses - so 'ofbiz --test ... -Pallure' would
+        // silently write the *official* adapter's own (differently-shaped) result files into the
+        // same directory as AllureSuiteReportSink's hand-rolled ones. Found by running Task 5's
+        // manual verification - see the 2026-08-17 Allure design doc's "no combined report"
+        // requirement. Excluded here (matching every runtime adapter jar's Gradle module-cache path,
+        // not the *.gradle.* plugin jars themselves) so this JVM never carries that adapter,
+        // regardless of -Pallure.
+        classpath = (sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath)
+                .filter { !it.path.contains('/io.qameta.allure/') }
         if (taskName ==~ /^ofbiz.*(--test|-t).*/) {
             // TestRunContainer.java writes one XML per suite as "<suite.getName()>.xml" and only
             // ever overwrites the suites a run actually re-executes - nothing here deletes the
