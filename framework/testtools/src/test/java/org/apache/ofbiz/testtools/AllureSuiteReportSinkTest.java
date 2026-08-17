@@ -44,7 +44,7 @@ import static org.hamcrest.Matchers.notNullValue;
 class AllureSuiteReportSinkTest {
 
     @TempDir
-    File resultsDir;
+    private File resultsDir;
 
     @Test
     void writesAPassedResultWithNoStatusDetails() throws IOException {
