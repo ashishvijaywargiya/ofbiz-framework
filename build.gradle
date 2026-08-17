@@ -1480,6 +1480,21 @@ def createOfbizCommandTask(taskName, arguments) {
                     systemProperty 'test.report.results.dir', file('./runtime/logs/test-results').absolutePath
                 }
             })
+
+            // Opt-in Allure reporting (see AllureSuiteReportSink and TestRunContainer's
+            // allure.results.directory system property): only wired when -Pallure is passed, since
+            // this same JavaExec also backs production/CI "ofbiz --test" runs launched via bin/ofbiz
+            // directly, outside Gradle, which must stay byte-for-byte unaffected. Set as a
+            // systemProperty (not a plain -D on this `gradle` invocation) because it needs to reach
+            // the forked child JVM this JavaExec launches. Same staleness reasoning as the XML
+            // cleanup above applies to Allure's JSON results too.
+            if (project.hasProperty('allure')) {
+                def allureResultsDir = "${rootDir}/runtime/logs/test-results/allure-results"
+                systemProperty 'allure.results.directory', allureResultsDir
+                doFirst {
+                    delete fileTree(allureResultsDir) { include '*.json' }
+                }
+            }
         }
         mainClass = application.mainClass
         args arguments
