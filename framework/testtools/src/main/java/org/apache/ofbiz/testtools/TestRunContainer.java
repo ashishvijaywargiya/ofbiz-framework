@@ -89,18 +89,23 @@ public class TestRunContainer implements Container {
         }
 
         boolean failedRun = false;
+        AllureSuiteReportSink allureSink = createAllureSinkIfEnabled();
         for (ModelTestSuite modelSuite: jsWrapper.getModelTestSuites()) {
             String suiteName = modelSuite.getSuiteName();
             List<SuiteEntry> preparedTestList = modelSuite.getPreparedTestList();
 
             SuiteXmlReportWriter xmlSink = createXmlReportWriter(suiteName);
             SuiteReportLogger logSink = new SuiteReportLogger();
-            xmlSink.startSuite(suiteName);
-            logSink.startSuite(suiteName);
+            SuiteReportSink[] sinks = allureSink != null
+                    ? new SuiteReportSink[] {xmlSink, logSink, allureSink}
+                    : new SuiteReportSink[] {xmlSink, logSink};
+            for (SuiteReportSink sink : sinks) {
+                sink.startSuite(suiteName);
+            }
 
             try {
                 runSuiteEntries(preparedTestList, modelSuite.getDelegator(),
-                        modelSuite.getDispatcher(), Map.of(), methodName, xmlSink, logSink);
+                        modelSuite.getDispatcher(), Map.of(), methodName, sinks);
             } catch (Throwable t) {
                 // Everything inside runSuiteEntries() is per-entry isolated already: a JUnit 3 test's
                 // own exception is always caught by TestCase.runBare()/TestResult's own
@@ -108,12 +113,13 @@ public class TestRunContainer implements Container {
                 // escaping its own launcher.execute() call. This is a last-resort net for anything
                 // that still escapes the loop itself - without it, that would abort every remaining
                 // testdef suite in this loop, not just the one that hit the problem.
-                reportSuiteExecutionFailure(suiteName, t, xmlSink, logSink);
+                reportSuiteExecutionFailure(suiteName, t, sinks);
             }
 
             modelSuite.getDelegator().rollback(); // rollback all entity operations
-            xmlSink.endSuite();
-            logSink.endSuite();
+            for (SuiteReportSink sink : sinks) {
+                sink.endSuite();
+            }
 
             failedRun = !xmlSink.wasSuccessful() || failedRun;
         }
@@ -196,6 +202,22 @@ public class TestRunContainer implements Container {
                 ThreadContext.remove(JupiterTestExtension.TEST_CASE_MDC_KEY);
             }
         }
+    }
+
+    /**
+     * Whether this run should also report to Allure, and if so, where. Opt-in only, via the
+     * {@code allure.results.directory} system property (Allure's own naming convention) - this
+     * container runs both under Gradle (a forked JavaExec child JVM, see build.gradle's
+     * {@code createOfbizCommandTask}) and inside a deployed instance ({@code bin/ofbiz --test},
+     * webtools' "Run Test" screen), so it must never write Allure output unless explicitly asked.
+     *
+     * <p>Package-private and static, taking no parameters, so TestRunContainerTest can exercise it
+     * directly without a full ofbiz --test container bootstrap.
+     * @return a new AllureSuiteReportSink if the property is set, otherwise null
+     */
+    static AllureSuiteReportSink createAllureSinkIfEnabled() {
+        String resultsDir = System.getProperty("allure.results.directory");
+        return resultsDir != null ? new AllureSuiteReportSink(new File(resultsDir)) : null;
     }
 
     private static void setLoggerLevel(String logLevel) {

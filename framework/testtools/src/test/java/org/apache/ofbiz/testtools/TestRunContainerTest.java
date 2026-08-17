@@ -18,6 +18,7 @@
  *******************************************************************************/
 package org.apache.ofbiz.testtools;
 
+import java.io.File;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +27,7 @@ import org.apache.ofbiz.base.container.ContainerException;
 import org.apache.ofbiz.entity.Delegator;
 import org.apache.ofbiz.service.LocalDispatcher;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import junit.framework.TestCase;
 import junit.framework.TestResult;
@@ -202,6 +204,35 @@ class TestRunContainerTest {
         List<SuiteEntry> entries = List.of(new SuiteEntry.Junit3Entry(new NamedCase("dataLoad")));
 
         assertDoesNotThrow(() -> TestRunContainer.validateMethodAppliesToSuite(null, "partytests", entries));
+    }
+
+    @Test
+    void createAllureSinkIfEnabledReturnsNullWhenPropertyNotSet() {
+        String previous = System.clearProperty("allure.results.directory");
+        try {
+            assertThat(TestRunContainer.createAllureSinkIfEnabled(), nullValue());
+        } finally {
+            restoreProperty("allure.results.directory", previous);
+        }
+    }
+
+    @Test
+    void createAllureSinkIfEnabledReturnsASinkWhenPropertySet(@TempDir File tempDir) {
+        String previous = System.setProperty("allure.results.directory",
+                new File(tempDir, "allure-results").getAbsolutePath());
+        try {
+            assertThat(TestRunContainer.createAllureSinkIfEnabled(), instanceOf(AllureSuiteReportSink.class));
+        } finally {
+            restoreProperty("allure.results.directory", previous);
+        }
+    }
+
+    private static void restoreProperty(String key, String previousValue) {
+        if (previousValue == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, previousValue);
+        }
     }
 
     static class NamedCase extends TestCase {
