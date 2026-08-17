@@ -410,6 +410,13 @@ test {
     testLogging {
         events "passed", "skipped", "failed"
     }
+    // Same staleness reasoning as testIntegration's Allure-results cleanup (see
+    // createOfbizCommandTask): the plugin's results directory is marked @Internal, not
+    // @OutputDirectory, so Gradle never tracks or cleans it - a narrower rerun (e.g. --tests)
+    // otherwise leaves stale results from a wider previous run blending into the next report.
+    doFirst {
+        delete fileTree(layout.buildDirectory.dir('allure-results').get())
+    }
     finalizedBy(reskinGradleTestReport)
 }
 
@@ -1464,9 +1471,10 @@ def createOfbizCommandTask(taskName, arguments) {
         // manual verification - see the 2026-08-17 Allure design doc's "no combined report"
         // requirement. Excluded here (matching every runtime adapter jar's Gradle module-cache path,
         // not the *.gradle.* plugin jars themselves) so this JVM never carries that adapter,
-        // regardless of -PenableAllureIntegration.
+        // regardless of -PenableAllureIntegration. Path is normalized to forward slashes first
+        // since File.getPath() returns backslash-separated paths on Windows.
         classpath = (sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath)
-                .filter { !it.path.contains('/io.qameta.allure/') }
+                .filter { !it.path.replace(File.separatorChar, '/' as char).contains('/io.qameta.allure/') }
         if (taskName ==~ /^ofbiz.*(--test|-t).*/) {
             // TestRunContainer.java writes one XML per suite as "<suite.getName()>.xml" and only
             // ever overwrites the suites a run actually re-executes - nothing here deletes the
@@ -1509,7 +1517,7 @@ def createOfbizCommandTask(taskName, arguments) {
             // this `gradle` invocation) because it needs to reach the forked child JVM this JavaExec
             // launches. Same staleness reasoning as the XML cleanup above applies to Allure's JSON
             // results too.
-            if (project.hasProperty('enableAllureIntegration')) {
+            if (providers.gradleProperty('enableAllureIntegration').isPresent()) {
                 def allureResultsDir = "${rootDir}/runtime/logs/test-results/allure-results"
                 systemProperty 'allure.results.directory', allureResultsDir
                 doFirst {

@@ -22,6 +22,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.apache.ofbiz.base.util.Debug;
@@ -114,6 +116,9 @@ class AllureSuiteReportSink implements SuiteReportSink {
     }
 
     private static void appendStatusDetails(StringBuilder json, Outcome outcome) {
+        if (outcome instanceof Outcome.Passed) {
+            return;
+        }
         String message = null;
         String trace = null;
         if (outcome instanceof Outcome.Failure failure) {
@@ -123,14 +128,15 @@ class AllureSuiteReportSink implements SuiteReportSink {
             message = error.throwable().getMessage();
             trace = ReportingSupport.stackTraceOf(error.throwable());
         }
-        if (trace == null) {
-            return;
-        }
         json.append("  \"statusDetails\": {\n");
+        List<String> fields = new ArrayList<>();
         if (message != null) {
-            json.append("    \"message\": \"").append(escapeJson(message)).append("\",\n");
+            fields.add("    \"message\": \"" + escapeJson(message) + "\"");
         }
-        json.append("    \"trace\": \"").append(escapeJson(trace)).append("\"\n");
+        if (trace != null) {
+            fields.add("    \"trace\": \"" + escapeJson(trace) + "\"");
+        }
+        json.append(String.join(",\n", fields)).append("\n");
         json.append("  },\n");
     }
 

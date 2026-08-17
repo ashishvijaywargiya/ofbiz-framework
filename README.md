@@ -527,6 +527,19 @@ verbose:
 
 `gradlew "ofbiz --test loglevel=fatal"`
 
+#### View unit or integration test results in Allure
+
+Both `gradlew test` and `gradlew testIntegration` can additionally produce an
+[Allure](https://allurereport.org/) report - two independent reports, never combined:
+
+* Unit tests: `gradlew test`, then `allure serve build/allure-results`
+* Integration tests: `gradlew testIntegration -PenableAllureIntegration`, then
+  `allure serve runtime/logs/test-results/allure-results`
+
+Requires the Allure commandline tool installed separately (e.g. `brew install allure` on macOS).
+The integration-test report is opt-in via `-PenableAllureIntegration` since the same code path also
+runs unmodified in production/CI via a packaged `ofbiz.jar --test`, outside Gradle.
+
 #### Execute an integration test case
 
 Run a test case, in this example the component is "entity" and the case name is
