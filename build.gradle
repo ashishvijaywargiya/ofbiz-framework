@@ -1458,13 +1458,13 @@ def createOfbizCommandTask(taskName, arguments) {
         // 'test' task. Left in, this JVM's JupiterTestExtension.JupiterClassRunner (which makes its
         // own internal Launcher.execute() call to run Jupiter-based integration test suites) would
         // trigger it too, and it happens to read the same allure.results.directory system property
-        // AllureSuiteReportSink's own opt-in flag uses - so 'ofbiz --test ... -Pallure' would
-        // silently write the *official* adapter's own (differently-shaped) result files into the
-        // same directory as AllureSuiteReportSink's hand-rolled ones. Found by running Task 5's
+        // AllureSuiteReportSink's own opt-in flag uses - so 'ofbiz --test ... -PenableAllureIntegration'
+        // would silently write the *official* adapter's own (differently-shaped) result files into
+        // the same directory as AllureSuiteReportSink's hand-rolled ones. Found by running Task 5's
         // manual verification - see the 2026-08-17 Allure design doc's "no combined report"
         // requirement. Excluded here (matching every runtime adapter jar's Gradle module-cache path,
         // not the *.gradle.* plugin jars themselves) so this JVM never carries that adapter,
-        // regardless of -Pallure.
+        // regardless of -PenableAllureIntegration.
         classpath = (sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath)
                 .filter { !it.path.contains('/io.qameta.allure/') }
         if (taskName ==~ /^ofbiz.*(--test|-t).*/) {
@@ -1496,13 +1496,20 @@ def createOfbizCommandTask(taskName, arguments) {
             })
 
             // Opt-in Allure reporting (see AllureSuiteReportSink and TestRunContainer's
-            // allure.results.directory system property): only wired when -Pallure is passed, since
-            // this same JavaExec also backs production/CI "ofbiz --test" runs launched via bin/ofbiz
-            // directly, outside Gradle, which must stay byte-for-byte unaffected. Set as a
-            // systemProperty (not a plain -D on this `gradle` invocation) because it needs to reach
-            // the forked child JVM this JavaExec launches. Same staleness reasoning as the XML
-            // cleanup above applies to Allure's JSON results too.
-            if (project.hasProperty('allure')) {
+            // allure.results.directory system property): only wired when -PenableAllureIntegration
+            // is passed, since this same JavaExec also backs production/CI "ofbiz --test" runs
+            // launched via bin/ofbiz directly, outside Gradle, which must stay byte-for-byte
+            // unaffected. Deliberately NOT named 'allure': the io.qameta.allure plugin applied above
+            // (for gradlew test) registers a project extension literally named 'allure', and
+            // project.hasProperty() resolves extension objects the same way it resolves -P
+            // properties - so hasProperty('allure') was unconditionally true regardless of any -P
+            // flag, silently defeating the opt-in guarantee entirely (found via Task 5's manual
+            // verification; confirmed with `./gradlew properties` showing "allure: extension
+            // 'allure'" even with no -P flag at all). Set as a systemProperty (not a plain -D on
+            // this `gradle` invocation) because it needs to reach the forked child JVM this JavaExec
+            // launches. Same staleness reasoning as the XML cleanup above applies to Allure's JSON
+            // results too.
+            if (project.hasProperty('enableAllureIntegration')) {
                 def allureResultsDir = "${rootDir}/runtime/logs/test-results/allure-results"
                 systemProperty 'allure.results.directory', allureResultsDir
                 doFirst {
