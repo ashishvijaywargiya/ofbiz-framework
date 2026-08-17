@@ -33,6 +33,7 @@ plugins {
     id 'maven-publish'
     id "org.asciidoctor.jvm.convert" version "4.0.5" // For now we can not update above. See "production-ready version" warning in https://plugins.gradle.org/plugin/org.asciidoctor.jvm
     id "org.asciidoctor.jvm.pdf" version "4.0.5"     // For now we can not update above. See "production-ready version" warning in https://plugins.gradle.org/plugin/org.asciidoctor.jvm
+    id "io.qameta.allure" version "4.1.0"
     id "org.owasp.dependencycheck" version "latest.release" apply false
     id "se.patrikerdes.use-latest-versions"  version "latest.release" apply false
     id "com.github.ben-manes.versions" version "latest.release" apply false
@@ -439,6 +440,24 @@ archiveUnitTestReportProvider.configure {
 }
 testTaskProvider.configure {
     finalizedBy(archiveUnitTestReportProvider)
+}
+
+// Allure reporting for 'gradlew test' (JUnit5/Jupiter unit tests only - the excludeTags above already
+// scopes this task to unit tests, so Allure results only ever cover that same set). Uses the plugin's
+// own default results directory (build/allure-results) and default report-runtime version -
+// deliberately NOT pointed at runtime/logs/test-results: see the 2026-08-17 Allure design doc for why
+// unit and integration test reports stay separate. View with 'allure serve build/allure-results' (the
+// Homebrew allure CLI, not the plugin's own allureServe task, so both this and the integration-test
+// report are viewed the same way).
+allure {
+    adapter {
+        frameworks {
+            junit5 {
+                enabled = true
+                autoconfigureListeners = true
+            }
+        }
+    }
 }
 
 // 'gradlew test --tests <ClassName>' against a @JunitJupiterTest class fails with Gradle's generic
