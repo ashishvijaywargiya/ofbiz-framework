@@ -114,20 +114,26 @@ public class ScreenFactory {
 
     public static Map<String, ModelScreen> getScreensFromLocation(String resourceName)
             throws IOException, SAXException, ParserConfigurationException {
-        Map<String, ModelScreen> modelScreenMap = SCREEN_LOCATION_CACHE.get(resourceName);
+        String sanitizedLocation = WidgetSecureLocation.sanitize(resourceName);
+        if (sanitizedLocation == null) {
+            Debug.logWarning("The location of screen resource isn't an allowed path. Abort rendering. Raw location [%s]",
+                    MODULE, resourceName);
+            throw new IllegalArgumentException("Abort screen rendering due to unallowed screen location");
+        }
+        Map<String, ModelScreen> modelScreenMap = SCREEN_LOCATION_CACHE.get(sanitizedLocation);
         if (modelScreenMap == null) {
             synchronized (ScreenFactory.class) {
-                modelScreenMap = SCREEN_LOCATION_CACHE.get(resourceName);
+                modelScreenMap = SCREEN_LOCATION_CACHE.get(sanitizedLocation);
                 if (modelScreenMap == null) {
                     long startTime = System.currentTimeMillis();
                     URL screenFileUrl = null;
-                    screenFileUrl = FlexibleLocation.resolveLocation(resourceName);
+                    screenFileUrl = FlexibleLocation.resolveLocation(sanitizedLocation);
                     if (screenFileUrl == null || UtilValidate.isUrlInStringAndDoesNotStartByComponentProtocol(screenFileUrl.toString())) {
                         throw new IllegalArgumentException("Could not resolve location to URL: " + resourceName);
                     }
                     Document screenFileDoc = UtilXml.readXmlDocument(screenFileUrl, true, true);
-                    modelScreenMap = readScreenDocument(screenFileDoc, resourceName);
-                    SCREEN_LOCATION_CACHE.put(resourceName, modelScreenMap);
+                    modelScreenMap = readScreenDocument(screenFileDoc, sanitizedLocation);
+                    SCREEN_LOCATION_CACHE.put(sanitizedLocation, modelScreenMap);
                     double totalSeconds = (System.currentTimeMillis() - startTime) / 1000.0;
                     Debug.logInfo("Got " + modelScreenMap.size() + " screens in " + totalSeconds + "s from: "
                             + screenFileUrl.toExternalForm(), MODULE);
@@ -143,8 +149,14 @@ public class ScreenFactory {
 
     public static ModelScreen getScreenFromWebappContext(String resourceName, String screenName, HttpServletRequest request)
             throws IOException, SAXException, ParserConfigurationException {
+        String sanitizedLocation = WidgetSecureLocation.sanitize(resourceName);
+        if (sanitizedLocation == null) {
+            Debug.logWarning("The location of screen [%s] isn't an allowed path. Abort rendering. Raw location [%s]",
+                    MODULE, screenName, resourceName);
+            throw new IllegalArgumentException("Abort screen rendering due to unallowed screen location");
+        }
         String webappName = UtilHttp.getApplicationName(request);
-        String cacheKey = webappName + "::" + resourceName;
+        String cacheKey = webappName + "::" + sanitizedLocation;
 
 
         Map<String, ModelScreen> modelScreenMap = SCREEN_WEBAPP_CACHE.get(cacheKey);
@@ -154,9 +166,9 @@ public class ScreenFactory {
                 if (modelScreenMap == null) {
                     ServletContext servletContext = request.getServletContext();
 
-                    URL screenFileUrl = servletContext.getResource(resourceName);
+                    URL screenFileUrl = servletContext.getResource(sanitizedLocation);
                     Document screenFileDoc = UtilXml.readXmlDocument(screenFileUrl, true, true);
-                    modelScreenMap = readScreenDocument(screenFileDoc, resourceName);
+                    modelScreenMap = readScreenDocument(screenFileDoc, sanitizedLocation);
                     SCREEN_WEBAPP_CACHE.put(cacheKey, modelScreenMap);
                 }
             }
