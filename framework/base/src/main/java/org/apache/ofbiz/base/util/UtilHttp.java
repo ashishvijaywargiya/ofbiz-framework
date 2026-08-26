@@ -283,8 +283,18 @@ public final class UtilHttp {
                         }
                         /* OFBIZ-10833 - Set the consumed parameters in request attributes for enctype="multipart/form-data" type form
                          * so that it will be available for the next response. Please refer Jira for more details.
+                         *
+                         * A multipart field is anonymous, request-supplied input. Never let it shadow a name the
+                         * webapp already exposes as a trusted, application-owned ServletContext attribute (e.g.
+                         * mainDecoratorLocation, set from web.xml at filter init) - doing so let an unauthenticated
+                         * multipart request redirect trusted widget/screen locations.
                          */
-                        request.setAttribute(fieldName, multiPartMap.get(fieldName));
+                        if (request.getServletContext().getAttribute(fieldName) != null) {
+                            Debug.logWarning("Ignoring multipart field [%s]: it shadows an existing ServletContext attribute"
+                                    + " of the same name", MODULE, fieldName);
+                        } else {
+                            request.setAttribute(fieldName, multiPartMap.get(fieldName));
+                        }
                     } else {
                         String fileName = item.getName();
                         if (fileName.indexOf('\\') > -1 || fileName.indexOf('/') > -1) {

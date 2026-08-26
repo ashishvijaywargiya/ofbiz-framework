@@ -30,8 +30,13 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.Month;
@@ -40,9 +45,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.function.Predicate;
 
+import jakarta.servlet.ReadListener;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.ws.rs.HttpMethod;
 
+import org.apache.ofbiz.entity.Delegator;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -221,5 +231,82 @@ public final class UtilHttpTest {
     @Test
     public void missingRequestMakeParamListWithSuffix() {
         assertThrows(NullPointerException.class, () -> UtilHttp.makeParamListWithSuffix(null, "suffix", "prefix"));
+    }
+
+    // Covers the multipart half of the reported anonymous mainDecoratorLocation override (the
+    // request body did not need to be JSON - see WebAppUtilTests for the JSON half of the same
+    // fix). A multipart form field must never be able to shadow a name the webapp already
+    // exposes as a trusted, application-owned ServletContext attribute.
+    @Test
+    public void multiPartFieldDoesNotOverrideAnExistingServletContextAttribute() throws Exception {
+        ServletContext servletContext = mock(ServletContext.class);
+        when(servletContext.getAttribute("mainDecoratorLocation"))
+                .thenReturn("component://order/widget/ordermgr/CommonScreens.xml");
+        when(req.getServletContext()).thenReturn(servletContext);
+        when(req.getSession()).thenReturn(mock(HttpSession.class));
+        stubMultipartBody(req, "mainDecoratorLocation", "file:/dev/fd/292");
+
+        UtilHttp.getMultiPartParameterMap(req);
+
+        verify(req, never()).setAttribute("mainDecoratorLocation", "file:/dev/fd/292");
+    }
+
+    @Test
+    public void multiPartFieldStillSetsAttributesThatDoNotShadowContextConfig() throws Exception {
+        ServletContext servletContext = mock(ServletContext.class);
+        when(servletContext.getAttribute("searchString")).thenReturn(null);
+        when(req.getServletContext()).thenReturn(servletContext);
+        when(req.getSession()).thenReturn(mock(HttpSession.class));
+        stubMultipartBody(req, "searchString", "widgets");
+
+        UtilHttp.getMultiPartParameterMap(req);
+
+        verify(req).setAttribute("searchString", "widgets");
+    }
+
+    private static void stubMultipartBody(HttpServletRequest request, String fieldName, String fieldValue) {
+        String boundary = "----UtilHttpTestBoundary";
+        String body = "--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"" + fieldName + "\"\r\n"
+                + "\r\n"
+                + fieldValue + "\r\n"
+                + "--" + boundary + "--\r\n";
+        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        when(request.getMethod()).thenReturn("POST");
+        when(request.getContentType()).thenReturn("multipart/form-data; boundary=" + boundary);
+        when(request.getContentLengthLong()).thenReturn((long) bodyBytes.length);
+        when(request.getCharacterEncoding()).thenReturn(null);
+        Delegator delegator = mock(Delegator.class);
+        when(delegator.getDelegator()).thenReturn(delegator);
+        when(request.getAttribute("delegator")).thenReturn(delegator);
+        try {
+            when(request.getInputStream()).thenReturn(inputStreamOf(bodyBytes));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static ServletInputStream inputStreamOf(byte[] content) {
+        ByteArrayInputStream bytes = new ByteArrayInputStream(content);
+        return new ServletInputStream() {
+            @Override
+            public boolean isFinished() {
+                return bytes.available() == 0;
+            }
+
+            @Override
+            public boolean isReady() {
+                return true;
+            }
+
+            @Override
+            public void setReadListener(ReadListener readListener) {
+            }
+
+            @Override
+            public int read() {
+                return bytes.read();
+            }
+        };
     }
 }
