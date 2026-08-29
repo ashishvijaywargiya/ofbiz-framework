@@ -34,10 +34,11 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 /**
- * Sums pass/fail/skip counts across every {@code <testsuite>} JUnit XML file under a directory,
- * matching the {@code tests}/{@code failures}/{@code errors}/{@code skipped} attributes
- * {@code org.apache.ofbiz.testtools.SuiteXmlReportWriter} writes for {@code testIntegration}
- * runs, and that Gradle's own JUnit Platform listener writes for the plain {@code test} task.
+ * Sums pass/fail/skip counts (and total duration) across every {@code <testsuite>} JUnit XML file
+ * under a directory, matching the {@code tests}/{@code failures}/{@code errors}/{@code skipped}/
+ * {@code time} attributes {@code org.apache.ofbiz.testtools.SuiteXmlReportWriter} writes for
+ * {@code testIntegration} runs, and that Gradle's own JUnit Platform listener writes for the
+ * plain {@code test} task.
  */
 public final class JUnitXmlCounter {
 
@@ -58,28 +59,71 @@ public final class JUnitXmlCounter {
     private JUnitXmlCounter() {
     }
 
+    /** Pass/fail/skip counts plus the summed {@code time} attribute, in whole seconds. */
+    public static final class Result {
+        private final TestRunManifest.Counts counts;
+        private final long durationSeconds;
+
+        public Result(TestRunManifest.Counts counts, long durationSeconds) {
+            this.counts = counts;
+            this.durationSeconds = durationSeconds;
+        }
+
+        public TestRunManifest.Counts getCounts() {
+            return counts;
+        }
+
+        public long getDurationSeconds() {
+            return durationSeconds;
+        }
+    }
+
+    /** One file's tally: counts plus its unrounded duration sum, before the final rounding. */
+    private static final class FileTally {
+        private final TestRunManifest.Counts counts;
+        private final double durationSeconds;
+
+        FileTally(TestRunManifest.Counts counts, double durationSeconds) {
+            this.counts = counts;
+            this.durationSeconds = durationSeconds;
+        }
+    }
+
     /** Recursively walks {@code resultsDir} for {@code *.xml} files and sums their testsuite counts. */
     public static TestRunManifest.Counts count(File resultsDir) {
+        return countWithDuration(resultsDir).getCounts();
+    }
+
+    /**
+     * Recursively walks {@code resultsDir} for {@code *.xml} files and sums both their testsuite
+     * counts and their {@code time} attributes (fractional seconds, per the JUnit XML schema),
+     * rounded to the nearest whole second in the returned {@link Result}. Same single walk
+     * {@link #count} delegates to - no separate parsing pass for duration.
+     */
+    public static Result countWithDuration(File resultsDir) {
         int total = 0;
         int failed = 0;
         int skipped = 0;
+        double durationSeconds = 0;
         if (resultsDir != null && resultsDir.isDirectory()) {
             for (File xmlFile : listXmlFilesRecursively(resultsDir)) {
                 try {
-                    TestRunManifest.Counts fileCounts = countOneFile(xmlFile);
-                    total += fileCounts.getTotal();
-                    failed += fileCounts.getFailed();
-                    skipped += fileCounts.getSkipped();
+                    FileTally tally = countOneFile(xmlFile);
+                    total += tally.counts.getTotal();
+                    failed += tally.counts.getFailed();
+                    skipped += tally.counts.getSkipped();
+                    durationSeconds += tally.durationSeconds;
                 } catch (Exception e) {
                     // Malformed/partial XML from an interrupted run - skip it, don't fail archiving.
                     Debug.logWarning(e, "JUnitXmlCounter: skipping unparsable file " + xmlFile, MODULE);
                 }
             }
         }
-        return new TestRunManifest.Counts(total, total - failed - skipped, failed, skipped);
+        TestRunManifest.Counts counts = new TestRunManifest.Counts(total, total - failed - skipped, failed, skipped);
+        return new Result(counts, Math.round(durationSeconds));
     }
 
-    private static TestRunManifest.Counts countOneFile(File xmlFile)
+    private static FileTally countOneFile(File xmlFile)
             throws ParserConfigurationException, IOException, SAXException {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -89,13 +133,16 @@ public final class JUnitXmlCounter {
         int total = 0;
         int failed = 0;
         int skipped = 0;
+        double durationSeconds = 0;
         for (int i = 0; i < suites.getLength(); i++) {
             Element suite = (Element) suites.item(i);
             total += parseIntAttribute(suite, "tests");
             failed += parseIntAttribute(suite, "failures") + parseIntAttribute(suite, "errors");
             skipped += parseIntAttribute(suite, "skipped");
+            durationSeconds += parseDoubleAttribute(suite, "time");
         }
-        return new TestRunManifest.Counts(total, total - failed - skipped, failed, skipped);
+        TestRunManifest.Counts counts = new TestRunManifest.Counts(total, total - failed - skipped, failed, skipped);
+        return new FileTally(counts, durationSeconds);
     }
 
     private static int parseIntAttribute(Element element, String attributeName) {
@@ -105,6 +152,18 @@ public final class JUnitXmlCounter {
         }
         try {
             return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static double parseDoubleAttribute(Element element, String attributeName) {
+        String value = element.getAttribute(attributeName);
+        if (value == null || value.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Double.parseDouble(value.trim());
         } catch (NumberFormatException e) {
             return 0;
         }

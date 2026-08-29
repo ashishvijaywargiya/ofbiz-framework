@@ -87,9 +87,46 @@ class JUnitXmlCounterTest {
         assertThat(counts.getSkipped(), is(0));
     }
 
+    @Test
+    void sumsDurationAcrossMultipleXmlFilesRecursively(@TempDir File resultsDir) throws IOException {
+        writeSuiteXml(new File(resultsDir, "SuiteA.xml"), 10, 1, 1, 0, 1.5);
+        File nested = new File(resultsDir, "sub");
+        nested.mkdirs();
+        writeSuiteXml(new File(nested, "SuiteB.xml"), 5, 0, 0, 2, 2.25);
+
+        JUnitXmlCounter.Result result = JUnitXmlCounter.countWithDuration(resultsDir);
+
+        assertThat(result.getDurationSeconds(), is(4L)); // round(1.5 + 2.25) == round(3.75) == 4
+        assertThat(result.getCounts().getTotal(), is(15));
+    }
+
+    @Test
+    void durationDefaultsToZeroWhenTimeAttributeIsMissing(@TempDir File resultsDir) throws IOException {
+        writeSuiteXml(new File(resultsDir, "SuiteA.xml"), 3, 0, 0, 0);
+
+        JUnitXmlCounter.Result result = JUnitXmlCounter.countWithDuration(resultsDir);
+
+        assertThat(result.getDurationSeconds(), is(0L));
+    }
+
+    @Test
+    void countStillDelegatesToCountWithDurationUnchanged(@TempDir File resultsDir) throws IOException {
+        writeSuiteXml(new File(resultsDir, "SuiteA.xml"), 4, 1, 0, 0, 5.0);
+
+        TestRunManifest.Counts counts = JUnitXmlCounter.count(resultsDir);
+
+        assertThat(counts.getTotal(), is(4));
+        assertThat(counts.getFailed(), is(1));
+    }
+
     private static void writeSuiteXml(File file, int tests, int failures, int errors, int skipped) throws IOException {
+        writeSuiteXml(file, tests, failures, errors, skipped, 0);
+    }
+
+    private static void writeSuiteXml(File file, int tests, int failures, int errors, int skipped, double time)
+            throws IOException {
         String xml = "<testsuite name=\"x\" tests=\"" + tests + "\" failures=\"" + failures
-                + "\" errors=\"" + errors + "\" skipped=\"" + skipped + "\"></testsuite>";
+                + "\" errors=\"" + errors + "\" skipped=\"" + skipped + "\" time=\"" + time + "\"></testsuite>";
         Files.writeString(file.toPath(), xml);
     }
 }
