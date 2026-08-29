@@ -18,11 +18,17 @@
  */
 package org.apache.ofbiz.testtools.report;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 
+import org.apache.ofbiz.base.lang.JSON;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -120,5 +126,30 @@ class TestTrendAnalyzerTest {
         assertThat(report.getRuns().get(1).isSkippedIncreasedFlag(), is(true));
         assertThat(report.getRuns().get(2).isCountDecreasedFlag(), is(false));
         assertThat(report.getRuns().get(2).isSkippedIncreasedFlag(), is(false));
+    }
+
+    @Test
+    void analyzeFiltersBySuiteNameAndSortsChronologicallyFromDisk(@TempDir File baseDir) throws IOException {
+        writeManifest(new File(baseDir, "2026-08-21/10h00m00s_testIntegration"), "testIntegration",
+                "2026-08-21T10:00:00Z", "PASSED", 10, 0, 0, 30L);
+        writeManifest(new File(baseDir, "2026-08-20/09h00m00s_testIntegration"), "testIntegration",
+                "2026-08-20T09:00:00Z", "FAILED", 10, 1, 0, 30L);
+        writeManifest(new File(baseDir, "2026-08-20/08h00m00s_unit"), "unit",
+                "2026-08-20T08:00:00Z", "PASSED", 5, 0, 0, 10L); // different suite, must be excluded
+
+        TestTrendReport report = TestTrendAnalyzer.analyze(baseDir, "testIntegration", 25);
+
+        assertThat(report.getRunCount(), is(2));
+        assertThat(report.getRuns(), hasSize(2));
+        assertThat(report.getRuns().get(0).getArchivedAt(), is("2026-08-20T09:00:00Z"));
+        assertThat(report.getRuns().get(1).getArchivedAt(), is("2026-08-21T10:00:00Z"));
+    }
+
+    private static void writeManifest(File runDir, String suiteName, String archivedAt, String outcome, int total,
+            int failed, int skipped, Long durationSeconds) throws IOException {
+        Files.createDirectories(runDir.toPath());
+        TestRunManifest manifest = manifest(archivedAt, outcome, total, failed, skipped, durationSeconds);
+        manifest.setSuiteName(suiteName);
+        Files.writeString(new File(runDir, "manifest.json").toPath(), JSON.from(manifest).toString());
     }
 }

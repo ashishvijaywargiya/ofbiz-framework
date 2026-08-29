@@ -18,9 +18,16 @@
  */
 package org.apache.ofbiz.testtools.report;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+
+import org.apache.ofbiz.base.lang.JSON;
+import org.apache.ofbiz.base.util.Debug;
 
 /**
  * Pure decision logic that turns a chronological list of one suite's archived
@@ -33,6 +40,32 @@ import java.util.List;
 public final class TestTrendAnalyzer {
 
     private TestTrendAnalyzer() {
+    }
+
+    private static final String MODULE = TestTrendAnalyzer.class.getName();
+
+    /**
+     * Loads every archived manifest for {@code suiteName} under {@code baseDir} (via
+     * {@link TestReportPurgePlanner#discoverRunFolders}), sorts them chronologically by
+     * {@code archivedAt}, and delegates to {@link #analyzeManifests}. Unreadable/corrupt
+     * manifests are skipped with a logged warning, same defensive stance as the purge planner.
+     */
+    public static TestTrendReport analyze(File baseDir, String suiteName, int durationDeviationPercent) {
+        List<TestRunManifest> manifests = new ArrayList<>();
+        for (TestReportPurgePlanner.RunFolder runFolder : TestReportPurgePlanner.discoverRunFolders(baseDir)) {
+            if (!suiteName.equals(runFolder.getSuiteName())) {
+                continue;
+            }
+            File manifestFile = new File(runFolder.getDir(), "manifest.json");
+            try (FileInputStream in = new FileInputStream(manifestFile)) {
+                manifests.add(JSON.from(in).toObject(TestRunManifest.class));
+            } catch (IOException e) {
+                Debug.logWarning(e, "TestTrendAnalyzer: skipping unreadable " + manifestFile, MODULE);
+            }
+        }
+        manifests.sort(Comparator.comparing(TestRunManifest::getArchivedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder())));
+        return analyzeManifests(suiteName, manifests, durationDeviationPercent);
     }
 
     /**
