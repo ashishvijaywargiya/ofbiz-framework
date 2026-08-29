@@ -116,9 +116,7 @@ public final class TestTrendAnalyzer {
         if (durationSeconds == null || averageDuration == null || averageDuration == 0) {
             return false;
         }
-        // Signed, not absolute: only a run that took meaningfully *longer* than the baseline is a
-        // regression worth flagging - a run that finished faster than average is not a problem.
-        double deviation = (durationSeconds - averageDuration) / averageDuration * 100.0;
+        double deviation = Math.abs(durationSeconds - averageDuration) / averageDuration * 100.0;
         return deviation > deviationPercent;
     }
 }

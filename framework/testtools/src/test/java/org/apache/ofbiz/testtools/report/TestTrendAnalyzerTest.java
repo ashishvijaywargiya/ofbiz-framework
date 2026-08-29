@@ -82,9 +82,9 @@ class TestTrendAnalyzerTest {
     @Test
     void flagsARunWhoseDurationDeviatesPastTheThreshold() {
         List<TestRunManifest> manifests = List.of(
-                manifest("2026-08-20T00:00:00Z", "PASSED", 10, 0, 0, 20L),
-                manifest("2026-08-21T00:00:00Z", "PASSED", 10, 0, 0, 20L),
-                manifest("2026-08-22T00:00:00Z", "PASSED", 10, 0, 0, 60L)); // average ~33.3, +80% deviation
+                manifest("2026-08-20T00:00:00Z", "PASSED", 10, 0, 0, 30L),
+                manifest("2026-08-21T00:00:00Z", "PASSED", 10, 0, 0, 30L),
+                manifest("2026-08-22T00:00:00Z", "PASSED", 10, 0, 0, 45L)); // average 35, +28.6% deviation
 
         TestTrendReport report = TestTrendAnalyzer.analyzeManifests("testIntegration", manifests, 25);
 
