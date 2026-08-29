@@ -102,7 +102,9 @@ class JUnitXmlCounterTest {
 
     @Test
     void durationDefaultsToZeroWhenTimeAttributeIsMissing(@TempDir File resultsDir) throws IOException {
-        writeSuiteXml(new File(resultsDir, "SuiteA.xml"), 3, 0, 0, 0);
+        // Write XML directly without time attribute to test the actual missing-attribute code path
+        String xml = "<testsuite name=\"x\" tests=\"3\" failures=\"0\" errors=\"0\" skipped=\"0\"></testsuite>";
+        Files.writeString(new File(resultsDir, "SuiteA.xml").toPath(), xml);
 
         JUnitXmlCounter.Result result = JUnitXmlCounter.countWithDuration(resultsDir);
 
