@@ -28,4 +28,7 @@
     <test-case case-name="invoice-per-shipment-tests">
         <jupiter-test-suite class-name="org.apache.ofbiz.accounting.accounting.InvoicePerShipmentTests"/>
     </test-case>
+    <test-case case-name="send-invoice-per-email-permission-tests">
+        <jupiter-test-suite class-name="org.apache.ofbiz.accounting.invoice.SendInvoicePerEmailPermissionTests"/>
+    </test-case>
 </test-suite>
