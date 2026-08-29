@@ -65,7 +65,7 @@ public final class TestReportArchiver {
                 dateFolder + File.separator + timeFolder + "_" + request.getSuiteName());
         Files.createDirectories(runFolder.toPath());
 
-        TestRunManifest.Counts counts = JUnitXmlCounter.count(request.getResultsDir());
+        JUnitXmlCounter.Result countResult = JUnitXmlCounter.countWithDuration(request.getResultsDir());
 
         Map<String, String> artifacts = new LinkedHashMap<>();
         File resultsDest = new File(runFolder, "results");
@@ -91,7 +91,8 @@ public final class TestReportArchiver {
         manifest.setOutcome(request.getOutcome());
         manifest.setGitCommit(GitInfo.currentCommit(request.getProjectDir()));
         manifest.setGitBranch(GitInfo.currentBranch(request.getProjectDir()));
-        manifest.setCounts(counts);
+        manifest.setCounts(countResult.getCounts());
+        manifest.setDurationSeconds(countResult.getDurationSeconds());
         manifest.setResultsLocation(runFolder.getAbsolutePath());
         manifest.setArtifacts(artifacts);
         manifest.setTrigger(request.getTrigger());

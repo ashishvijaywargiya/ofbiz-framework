@@ -21,6 +21,8 @@ package org.apache.ofbiz.testtools.report;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 /**
  * Plain data holder serialized to {@code manifest.json} by {@link TestReportArchiver} and read
  * back by {@link TestReportPurgePlanner}, via {@link org.apache.ofbiz.base.lang.JSON}'s
@@ -40,6 +42,7 @@ public final class TestRunManifest {
     private Map<String, String> artifacts = new LinkedHashMap<>();
     private String trigger = "gradle";
     private Map<String, String> paramsUsed = new LinkedHashMap<>();
+    private Long durationSeconds;
 
     public String getRunId() {
         return runId;
@@ -135,6 +138,31 @@ public final class TestRunManifest {
 
     public void setParamsUsed(Map<String, String> paramsUsed) {
         this.paramsUsed = paramsUsed;
+    }
+
+    public Long getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Long durationSeconds) {
+        this.durationSeconds = durationSeconds;
+    }
+
+    /**
+     * True when this run actually tested something and both the counts and the recorded outcome
+     * agree it fully passed - the definition of a "protected baseline" run
+     * {@link TestReportPurgePlanner} never purges, and of a "PASSING" run
+     * {@link TestTrendAnalyzer}'s failure-rate/streak calculations use.
+     *
+     * <p>Not part of the manifest schema (see class javadoc) - it's derived from other fields, so
+     * {@code @JsonIgnore} keeps Jackson from treating this Java-bean-style "is" getter as a
+     * phantom {@code green} property on serialization, which would otherwise break
+     * deserialization of every manifest written after this method was added (no matching field
+     * or setter to read it back into).</p>
+     */
+    @JsonIgnore
+    public boolean isGreen() {
+        return counts != null && counts.getTotal() > 0 && counts.getFailed() == 0 && "PASSED".equals(outcome);
     }
 
     /** Pass/fail/skip totals for one archived run. */

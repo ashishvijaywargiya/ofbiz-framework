@@ -32,6 +32,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 
 class TestReportArchiverTest {
 
@@ -162,5 +163,30 @@ class TestReportArchiverTest {
 
         assertThat(manifest.getTrigger(), is("gradle"));
         assertThat(manifest.getParamsUsed(), is(Map.of()));
+    }
+
+    @Test
+    void archiveComputesDurationSecondsFromJUnitXmlTimeAttributes(@TempDir File tmp) throws IOException {
+        File baseDir = new File(tmp, "runtime/test-reports");
+        File resultsDir = new File(tmp, "runtime/logs/test-results");
+        resultsDir.mkdirs();
+        Files.writeString(new File(resultsDir, "SomeSuite.xml").toPath(),
+                "<testsuite name=\"x\" tests=\"3\" failures=\"0\" errors=\"0\" skipped=\"0\" time=\"12.6\"></testsuite>");
+
+        TestReportArchiver.ArchiveRequest request = new TestReportArchiver.ArchiveRequest(
+                baseDir, tmp, "testIntegration", "testIntegration", "PASSED", resultsDir, null);
+        TestRunManifest manifest = TestReportArchiver.archive(request);
+
+        assertThat(manifest.getDurationSeconds(), is(13L)); // round(12.6)
+    }
+
+    @Test
+    void manifestsArchivedBeforeThisFeatureDeserializeWithNullDuration() throws IOException {
+        String legacyJson = "{\"runId\":\"x\",\"suiteName\":\"unit\",\"outcome\":\"PASSED\","
+                + "\"counts\":{\"total\":1,\"passed\":1,\"failed\":0,\"skipped\":0}}";
+
+        TestRunManifest manifest = JSON.from(legacyJson).toObject(TestRunManifest.class);
+
+        assertThat(manifest.getDurationSeconds(), nullValue());
     }
 }

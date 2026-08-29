@@ -104,12 +104,7 @@ public final class TestReportPurgePlanner {
                 }
                 try (FileInputStream in = new FileInputStream(manifestFile)) {
                     TestRunManifest manifest = JSON.from(in).toObject(TestRunManifest.class);
-                    // A run only counts as green when it actually tested something (total > 0) and
-                    // both the counts and the recorded outcome agree it passed - otherwise an empty
-                    // or failed-before-any-XML-was-produced run (failed == 0 by default) would be
-                    // wrongly treated as a protected baseline.
-                    boolean green = manifest.getCounts() != null && manifest.getCounts().getTotal() > 0
-                            && manifest.getCounts().getFailed() == 0 && "PASSED".equals(manifest.getOutcome());
+                    boolean green = manifest.isGreen();
                     runFolders.add(new RunFolder(runDir, date, manifest.getSuiteName(), green));
                 } catch (IOException e) {
                     // Unreadable/corrupt manifest - leave the folder alone, don't guess.
