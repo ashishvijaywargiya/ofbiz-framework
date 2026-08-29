@@ -123,7 +123,7 @@ public final class TestTrendReportWriter {
                 + "<th>Failed</th><th>Skipped</th><th>Duration</th><th>Flags</th></tr>");
         for (TestTrendReport.Run run : report.getRuns()) {
             html.append("<tr><td>").append(escapeXml(run.getArchivedAt())).append("</td><td>")
-                    .append(run.getOutcome()).append("</td><td>")
+                    .append(escapeXml(run.getOutcome())).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getTotal()).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getFailed()).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getSkipped()).append("</td><td>")

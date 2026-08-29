@@ -140,8 +140,8 @@ class TestTrendReportWriterTest {
     void consoleAndHtmlRenderTheManifestsOwnOutcomeNotTheDerivedGreenFlag() {
         // A zero-test "PASSED" run: isGreen() is conservatively false (see TestRunManifest#isGreen),
         // but the manifest's own recorded outcome is still "PASSED" - the rendered text must match
-        // that recorded outcome, not the derived green boolean, or trends.json (serialized straight
-        // from outcome) and the console/HTML text would visibly disagree for this exact run.
+        // that recorded outcome, not the derived green boolean, or trends-<suiteName>.json (serialized
+        // straight from outcome) and the console/HTML text would visibly disagree for this exact run.
         TestTrendReport report = new TestTrendReport();
         report.setSuiteName("testIntegration");
         report.setRunCount(1);
