@@ -36,6 +36,14 @@ import org.apache.ofbiz.base.util.Debug;
  * {@link TestReportPurgePlanner}'s split between filesystem discovery ({@link #analyze}) and pure
  * logic ({@link #analyzeManifests}) so the logic is unit-testable with synthetic manifest lists,
  * no filesystem involved.
+ *
+ * <p>Failure rate and streak are both computed from {@link TestRunManifest#isGreen()}, not from
+ * the manifest's own recorded {@code outcome}: a zero-test run with {@code outcome="PASSED"} is
+ * treated as non-passing by {@code isGreen()}, intentionally more conservative than what the
+ * manifest itself reports. {@link TestTrendReport.Run#getOutcome()} still carries the manifest's
+ * unmodified {@code outcome} string for display, so the rendered report and {@code trends-<suiteName>.json}
+ * can legitimately show a run as its own recorded outcome even where the streak/failure-rate math
+ * treated it as failing.</p>
  */
 public final class TestTrendAnalyzer {
 

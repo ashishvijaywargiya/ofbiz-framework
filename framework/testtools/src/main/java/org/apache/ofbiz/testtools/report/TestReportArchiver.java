@@ -92,7 +92,10 @@ public final class TestReportArchiver {
         manifest.setGitCommit(GitInfo.currentCommit(request.getProjectDir()));
         manifest.setGitBranch(GitInfo.currentBranch(request.getProjectDir()));
         manifest.setCounts(countResult.getCounts());
-        manifest.setDurationSeconds(countResult.getDurationSeconds());
+        // Nothing was actually counted (missing/empty/unparsable resultsDir) - stamp null, not a
+        // genuine 0L, so TestTrendAnalyzer's baseline-mean calculation excludes this run instead
+        // of treating an aborted run as a real zero-second one.
+        manifest.setDurationSeconds(countResult.getCounts().getTotal() == 0 ? null : countResult.getDurationSeconds());
         manifest.setResultsLocation(runFolder.getAbsolutePath());
         manifest.setArtifacts(artifacts);
         manifest.setTrigger(request.getTrigger());

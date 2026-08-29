@@ -99,6 +99,24 @@ class TestTrendAnalyzerTest {
     }
 
     @Test
+    void flagsARunThatFinishedSignificantlyFasterThanTheBaseline() {
+        // Discriminates the bidirectional Math.abs(...) formula from the previously-reverted
+        // signed (slow-only) formula: mean = (40+40+20)/3 = 33.33.
+        // run0 (40s): |40-33.33|/33.33 = 20.0% either way - under threshold, never flagged.
+        // run2 (20s): bidirectional |20-33.33|/33.33 = 40.0% - past the 25% threshold, flagged.
+        //             signed-only  (20-33.33)/33.33  = -40.0% - not > 25%, would NOT be flagged.
+        List<TestRunManifest> manifests = List.of(
+                manifest("2026-08-20T00:00:00Z", "PASSED", 10, 0, 0, 40L),
+                manifest("2026-08-21T00:00:00Z", "PASSED", 10, 0, 0, 40L),
+                manifest("2026-08-22T00:00:00Z", "PASSED", 10, 0, 0, 20L));
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("testIntegration", manifests, 25);
+
+        assertThat(report.getRuns().get(0).isDurationDeviationFlag(), is(false));
+        assertThat(report.getRuns().get(2).isDurationDeviationFlag(), is(true));
+    }
+
+    @Test
     void excludesRunsWithNullDurationFromTheBaselineAndNeverFlagsThem() {
         List<TestRunManifest> manifests = List.of(
                 manifest("2026-08-20T00:00:00Z", "PASSED", 10, 0, 0, null),

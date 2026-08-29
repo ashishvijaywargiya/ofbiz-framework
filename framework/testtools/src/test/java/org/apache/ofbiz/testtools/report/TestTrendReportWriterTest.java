@@ -130,8 +130,60 @@ class TestTrendReportWriterTest {
     void writeCreatesBothFilesInOutputDir(@TempDir File tmp) throws IOException {
         TestTrendReportWriter.write(twoRunReport(), tmp);
 
-        assertThat(new File(tmp, "trends.json").exists(), is(true));
-        assertThat(new File(tmp, "trends.html").exists(), is(true));
-        assertThat(Files.readString(new File(tmp, "trends.json").toPath()), containsString("testIntegration"));
+        assertThat(new File(tmp, "trends-testIntegration.json").exists(), is(true));
+        assertThat(new File(tmp, "trends-testIntegration.html").exists(), is(true));
+        assertThat(Files.readString(new File(tmp, "trends-testIntegration.json").toPath()),
+                containsString("testIntegration"));
+    }
+
+    @Test
+    void consoleAndHtmlRenderTheManifestsOwnOutcomeNotTheDerivedGreenFlag() {
+        // A zero-test "PASSED" run: isGreen() is conservatively false (see TestRunManifest#isGreen),
+        // but the manifest's own recorded outcome is still "PASSED" - the rendered text must match
+        // that recorded outcome, not the derived green boolean, or trends.json (serialized straight
+        // from outcome) and the console/HTML text would visibly disagree for this exact run.
+        TestTrendReport report = new TestTrendReport();
+        report.setSuiteName("testIntegration");
+        report.setRunCount(1);
+        report.setNotEnoughHistory(false);
+        report.setFailureRate(1.0);
+        report.setStreakDirection("FAILING");
+        report.setStreakLength(1);
+
+        TestTrendReport.Run run = new TestTrendReport.Run();
+        run.setRunId("2026-08-22_10h00m00s_testIntegration");
+        run.setArchivedAt("2026-08-22T10:00:00Z");
+        run.setOutcome("PASSED");
+        run.setGreen(false);
+        run.setCounts(new TestRunManifest.Counts(0, 0, 0, 0));
+        report.setRuns(List.of(run));
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(summary, containsString("PASSED"));
+        assertThat(html, containsString("<td>PASSED</td>"));
+    }
+
+    @Test
+    void durationChartFallsBackToNoDataMessageWhenNoRunHasADuration() {
+        TestTrendReport report = twoRunReport();
+        report.getRuns().forEach(run -> run.setDurationSeconds(null));
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, containsString("No duration data recorded"));
+    }
+
+    @Test
+    void consoleSummaryIncludesCountDecreasedAndSkippedIncreasedSuffixes() {
+        TestTrendReport report = twoRunReport();
+        report.getRuns().get(1).setCountDecreasedFlag(true);
+        report.getRuns().get(1).setSkippedIncreasedFlag(true);
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+
+        assertThat(summary, containsString("[test count decreased]"));
+        assertThat(summary, containsString("[skipped increased]"));
     }
 }

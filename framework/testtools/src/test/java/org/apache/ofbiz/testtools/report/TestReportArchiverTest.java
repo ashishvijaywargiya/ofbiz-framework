@@ -181,6 +181,20 @@ class TestReportArchiverTest {
     }
 
     @Test
+    void durationIsNullNotZeroWhenResultsDirIsEmpty(@TempDir File tmp) throws IOException {
+        File baseDir = new File(tmp, "runtime/test-reports");
+        File resultsDir = new File(tmp, "runtime/logs/test-results");
+        resultsDir.mkdirs(); // exists, but contains no XML files - nothing was actually counted
+
+        TestReportArchiver.ArchiveRequest request = new TestReportArchiver.ArchiveRequest(
+                baseDir, tmp, "testIntegration", "testIntegration", "FAILED", resultsDir, null);
+        TestRunManifest manifest = TestReportArchiver.archive(request);
+
+        assertThat(manifest.getCounts().getTotal(), is(0));
+        assertThat(manifest.getDurationSeconds(), nullValue());
+    }
+
+    @Test
     void manifestsArchivedBeforeThisFeatureDeserializeWithNullDuration() throws IOException {
         String legacyJson = "{\"runId\":\"x\",\"suiteName\":\"unit\",\"outcome\":\"PASSED\","
                 + "\"counts\":{\"total\":1,\"passed\":1,\"failed\":0,\"skipped\":0}}";

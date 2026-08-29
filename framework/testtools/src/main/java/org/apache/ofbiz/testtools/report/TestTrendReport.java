@@ -25,7 +25,7 @@ import java.util.List;
  * Suite-level trend statistics computed by {@link TestTrendAnalyzer} from a chronological list of
  * archived {@link TestRunManifest}s: failure rate, current pass/fail streak, duration baseline +
  * per-run deviation flags, and per-run count-drift flags. Plain data holder, serialized to
- * {@code trends.json} by {@link TestTrendReportWriter} via the same Jackson-backed {@code JSON}
+ * {@code trends-<suiteName>.json} by {@link TestTrendReportWriter} via the same Jackson-backed {@code JSON}
  * helper {@code manifest.json} uses.
  */
 public final class TestTrendReport {

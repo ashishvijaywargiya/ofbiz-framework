@@ -28,10 +28,12 @@ import org.apache.ofbiz.base.lang.JSON;
 
 /**
  * Renders a {@link TestTrendReport} three ways: a console-friendly summary (printed by
- * {@link TestTrendReportCli}), {@code trends.json} (the report serialized via the same
- * Jackson-backed {@code JSON} helper {@code manifest.json} uses), and {@code trends.html} - a
- * self-contained page with two hand-rolled inline-SVG line charts (pass/fail over time, duration
- * over time) plus the underlying per-run table. No external chart library.
+ * {@link TestTrendReportCli}), {@code trends-<suiteName>.json} (the report serialized via the same
+ * Jackson-backed {@code JSON} helper {@code manifest.json} uses), and {@code trends-<suiteName>.html} -
+ * a self-contained page with two hand-rolled inline-SVG line charts (pass/fail over time, duration
+ * over time) plus the underlying per-run table. No external chart library. The suite name is part
+ * of the filename so that two suites configured to share the same output directory don't
+ * overwrite each other's trend report.
  */
 public final class TestTrendReportWriter {
 
@@ -43,11 +45,12 @@ public final class TestTrendReportWriter {
     private TestTrendReportWriter() {
     }
 
-    /** Writes {@code trends.json} and {@code trends.html} into {@code outputDir}. */
+    /** Writes {@code trends-<suiteName>.json} and {@code trends-<suiteName>.html} into {@code outputDir}. */
     public static void write(TestTrendReport report, File outputDir) throws IOException {
         Files.createDirectories(outputDir.toPath());
-        Files.writeString(new File(outputDir, "trends.json").toPath(), toJson(report));
-        Files.writeString(new File(outputDir, "trends.html").toPath(), toHtml(report));
+        String baseName = "trends-" + report.getSuiteName();
+        Files.writeString(new File(outputDir, baseName + ".json").toPath(), toJson(report));
+        Files.writeString(new File(outputDir, baseName + ".html").toPath(), toHtml(report));
     }
 
     public static String toJson(TestTrendReport report) throws IOException {
@@ -69,7 +72,7 @@ public final class TestTrendReportWriter {
         sb.append("  Runs (oldest to newest):\n");
         for (TestTrendReport.Run run : report.getRuns()) {
             sb.append("    ").append(run.getArchivedAt()).append("  ")
-                    .append(run.isGreen() ? "PASSED" : "FAILED").append("  ")
+                    .append(run.getOutcome()).append("  ")
                     .append(formatDuration(run.getDurationSeconds() == null ? null
                             : run.getDurationSeconds().doubleValue()));
             if (run.isDurationDeviationFlag()) {
@@ -120,7 +123,7 @@ public final class TestTrendReportWriter {
                 + "<th>Failed</th><th>Skipped</th><th>Duration</th><th>Flags</th></tr>");
         for (TestTrendReport.Run run : report.getRuns()) {
             html.append("<tr><td>").append(escapeXml(run.getArchivedAt())).append("</td><td>")
-                    .append(run.isGreen() ? "PASSED" : "FAILED").append("</td><td>")
+                    .append(run.getOutcome()).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getTotal()).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getFailed()).append("</td><td>")
                     .append(run.getCounts() == null ? "-" : run.getCounts().getSkipped()).append("</td><td>")

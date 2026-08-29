@@ -56,8 +56,8 @@ class TestTrendReportCliTest {
 
         TestTrendReportCli.main(new String[0]);
 
-        assertThat(new File(unitDir, "trends.json").exists(), is(true));
-        assertThat(new File(unitDir, "trends.html").exists(), is(true));
+        assertThat(new File(unitDir, "trends-unit.json").exists(), is(true));
+        assertThat(new File(unitDir, "trends-unit.html").exists(), is(true));
     }
 
     @Test
