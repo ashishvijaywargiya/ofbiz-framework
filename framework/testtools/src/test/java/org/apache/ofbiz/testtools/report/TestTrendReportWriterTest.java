@@ -112,6 +112,21 @@ class TestTrendReportWriterTest {
     }
 
     @Test
+    void consoleSummaryFormatsFailureRateStreakDurationAndPerRunLines() {
+        String summary = TestTrendReportWriter.toConsoleSummary(twoRunReport());
+
+        assertThat(summary, containsString("testIntegration"));
+        assertThat(summary, containsString("Failure rate: 50.0%"));
+        assertThat(summary, containsString("Streak: FAILING x1"));
+        assertThat(summary, containsString("Average duration: 50.0s"));
+        assertThat(summary, containsString("2026-08-20T10:00:00Z"));
+        assertThat(summary, containsString("PASSED"));
+        assertThat(summary, containsString("2026-08-21T10:00:00Z"));
+        assertThat(summary, containsString("FAILED"));
+        assertThat(summary, containsString("[duration deviation]"));
+    }
+
+    @Test
     void writeCreatesBothFilesInOutputDir(@TempDir File tmp) throws IOException {
         TestTrendReportWriter.write(twoRunReport(), tmp);
 
