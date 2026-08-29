@@ -1,0 +1,62 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+// Computes suite-level trend statistics (failure rate, streak, duration drift, count drift) from
+// already-archived test-report history (see test-report-archive.gradle) and writes trends.json/
+// trends.html into each suite's history base directory. Split into its own file for the same
+// "self-contained, easiest to find as a unit" reason as test-report-archive.gradle; applied from
+// build.gradle so it behaves exactly as if declared inline there.
+//
+// Standalone and on-demand only: NOT gated by test.history, NOT wired via finalizedBy/dependsOn
+// into test/testIntegration. Run explicitly: ./gradlew testReportTrends. It just reads whatever
+// history is already archived under the same directories test-report-archive.gradle resolves
+// (test.history.unit.dir / test.history.integration.dir in testtools.properties), independent of
+// whether archiving is currently turned on.
+def testtoolsPropertiesFile = file("$rootDir/framework/testtools/config/testtools.properties")
+def testtoolsProperties = new Properties()
+if (testtoolsPropertiesFile.exists()) {
+    testtoolsPropertiesFile.withInputStream { testtoolsProperties.load(it) }
+}
+
+def resolveConfiguredDir = { String configuredPath ->
+    File configured = file(configuredPath)
+    configured.isAbsolute() ? configured : file("$rootDir/$configuredPath")
+}
+
+def unitHistoryBaseDir = resolveConfiguredDir(
+        testtoolsProperties.getProperty('test.history.unit.dir', 'build/test-reports-history').trim())
+def integrationHistoryBaseDir = resolveConfiguredDir(
+        testtoolsProperties.getProperty('test.history.integration.dir', 'runtime/logs/test-reports-history').trim())
+def durationDeviationPercent = testtoolsProperties.getProperty('test.trend.duration.deviation.percent', '25').trim()
+
+tasks.register('testReportTrends', JavaExec) {
+    group = 'verification'
+    description = 'Computes and writes suite-level trend reports (trends.json/trends.html) from already-archived test-report history'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.apache.ofbiz.testtools.report.TestTrendReportCli'
+
+    systemProperty 'test.trend.unit.dir', unitHistoryBaseDir.absolutePath
+    systemProperty 'test.trend.integration.dir', integrationHistoryBaseDir.absolutePath
+    systemProperty 'test.trend.duration.deviation.percent', durationDeviationPercent
+
+    // TestTrendReportCli catches everything itself; ignoreExitValue covers the (should-never-
+    // happen) case of the JVM failing to start at all.
+    ignoreExitValue = true
+}
