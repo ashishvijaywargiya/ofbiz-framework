@@ -21,7 +21,7 @@ under the License.
 <svg width="${passFailChart.width}" height="${passFailChart.height}"
         viewBox="0 0 ${passFailChart.width} ${passFailChart.height}"
         xmlns="http://www.w3.org/2000/svg" class="trend-chart">
-<line x1="10" y1="${passFailChart.baselineY?string('0.0')}" x2="${passFailChart.width - 10}"
+<line x1="${passFailChart.plotLeft}" y1="${passFailChart.baselineY?string('0.0')}" x2="${passFailChart.plotRight}"
         y2="${passFailChart.baselineY?string('0.0')}" class="trend-baseline"/>
 <#list passFailChart.points as point>
 <circle cx="${point.x?string('0.0')}" cy="${point.y?string('0.0')}" r="12" fill="transparent">

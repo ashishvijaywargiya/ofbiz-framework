@@ -28,8 +28,10 @@ import java.nio.file.StandardCopyOption;
  * Copies the canonical {@code test-report.css} stylesheet (checked into source at
  * {@code framework/testtools/src/main/resources/templates/testreports/test-report.css}) next to a
  * generated report. Every HTML report this project generates - the trends report
- * ({@link TestTrendReportWriter}), and the single-page/framed {@code test}/{@code testIntegration}
- * reports ({@code test-reports.gradle}, via {@link TestReportCssCli}) - links this same file with a
+ * ({@link TestTrendReportWriter}, which calls this class directly), and the single-page/framed
+ * {@code test}/{@code testIntegration} reports ({@code test-reports.gradle}'s own
+ * {@code copyTestReportCss}, a plain file copy of this same resource rather than a call into this
+ * class) - links this same file with a
  * same-directory relative {@code <link href="test-report.css">} rather than inlining CSS text, so
  * one edit to the stylesheet reaches every report. A copy, not a shared link target, because the
  * report directories involved ({@code build/test-reports-history/},

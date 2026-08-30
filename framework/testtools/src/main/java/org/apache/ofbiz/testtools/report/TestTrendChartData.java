@@ -160,15 +160,19 @@ public final class TestTrendChartData {
         private final double ticksY;
         private final List<PassFailPoint> points;
         private final List<DateTick> ticks;
+        private final int plotLeft;
+        private final int plotRight;
 
         PassFailChart(int width, int height, double baselineY, double ticksY, List<PassFailPoint> points,
-                List<DateTick> ticks) {
+                List<DateTick> ticks, int plotLeft, int plotRight) {
             this.width = width;
             this.height = height;
             this.baselineY = baselineY;
             this.ticksY = ticksY;
             this.points = points;
             this.ticks = ticks;
+            this.plotLeft = plotLeft;
+            this.plotRight = plotRight;
         }
 
         public int getWidth() {
@@ -194,6 +198,17 @@ public final class TestTrendChartData {
         public List<DateTick> getTicks() {
             return ticks;
         }
+
+        /** Left/right x pixel bounds of the baseline and axis - {@code pass-fail-chart.ftl} draws its
+         *  axis line and tick math from these instead of its own hardcoded literals, so they can never
+         *  drift from what {@link #buildPassFailChart} actually plotted points/ticks against. */
+        public int getPlotLeft() {
+            return plotLeft;
+        }
+
+        public int getPlotRight() {
+            return plotRight;
+        }
     }
 
     /**
@@ -212,9 +227,12 @@ public final class TestTrendChartData {
         private final AxisLabel avgLine;
         private final double ticksY;
         private final List<DateTick> ticks;
+        private final int plotLeft;
+        private final int plotRight;
 
         DurationChart(int width, int height, boolean hasData, List<DurationPoint> points, AxisLabel minLabel,
-                AxisLabel maxLabel, AxisLabel avgLine, double ticksY, List<DateTick> ticks) {
+                AxisLabel maxLabel, AxisLabel avgLine, double ticksY, List<DateTick> ticks, int plotLeft,
+                int plotRight) {
             this.width = width;
             this.height = height;
             this.hasData = hasData;
@@ -224,6 +242,8 @@ public final class TestTrendChartData {
             this.avgLine = avgLine;
             this.ticksY = ticksY;
             this.ticks = ticks;
+            this.plotLeft = plotLeft;
+            this.plotRight = plotRight;
         }
 
         public int getWidth() {
@@ -261,6 +281,17 @@ public final class TestTrendChartData {
         public List<DateTick> getTicks() {
             return ticks;
         }
+
+        /** Left/right x pixel bounds of the gridlines/baseline and axis - {@code duration-chart.ftl}
+         *  draws its lines and tick math from these instead of its own hardcoded literals, so they can
+         *  never drift from what {@link #buildDurationChart} actually plotted points/ticks against. */
+        public int getPlotLeft() {
+            return plotLeft;
+        }
+
+        public int getPlotRight() {
+            return plotRight;
+        }
     }
 
     public static PassFailChart buildPassFailChart(List<TestTrendReport.Run> runs) {
@@ -268,20 +299,22 @@ public final class TestTrendChartData {
             return null;
         }
         int width = Math.max(CHART_MIN_WIDTH, runs.size() * CHART_WIDTH_PER_RUN);
-        double stepX = runs.size() <= 1 ? 0 : (double) (width - 20) / (runs.size() - 1);
+        int plotLeft = 10;
+        int plotRight = width - 10;
+        double stepX = runs.size() <= 1 ? 0 : (double) (plotRight - plotLeft) / (runs.size() - 1);
 
         List<PassFailPoint> points = new ArrayList<>();
         for (int i = 0; i < runs.size(); i++) {
             TestTrendReport.Run run = runs.get(i);
-            double x = 10 + i * stepX;
-            String tooltip = run.getArchivedAt() + " - " + run.getOutcome()
+            double x = plotLeft + i * stepX;
+            String tooltip = orEmpty(run.getArchivedAt()) + " - " + orEmpty(run.getOutcome())
                     + (run.getDurationSeconds() == null ? ""
                             : " (" + formatDuration(run.getDurationSeconds().doubleValue()) + ")");
             points.add(new PassFailPoint(x, PASS_FAIL_BASELINE_Y, run.isGreen() ? "pass" : "fail", tooltip));
         }
-        List<DateTick> ticks = buildDateTicks(runs, width, 10);
+        List<DateTick> ticks = buildDateTicks(runs, width, plotLeft);
         return new PassFailChart(width, PASS_FAIL_CHART_HEIGHT, PASS_FAIL_BASELINE_Y, PASS_FAIL_BASELINE_Y + 20,
-                points, ticks);
+                points, ticks, plotLeft, plotRight);
     }
 
     public static DurationChart buildDurationChart(List<TestTrendReport.Run> runs, Double averageDurationSeconds) {
@@ -291,6 +324,8 @@ public final class TestTrendChartData {
         int width = Math.max(CHART_MIN_WIDTH, runs.size() * CHART_WIDTH_PER_RUN);
         int height = DURATION_CHART_HEIGHT;
         double ticksY = height - 6;
+        int plotLeft = DURATION_PLOT_LEFT;
+        int plotRight = width - 10;
 
         double min = Double.MAX_VALUE;
         double max = Double.MIN_VALUE;
@@ -303,7 +338,8 @@ public final class TestTrendChartData {
             }
         }
         if (!any) {
-            return new DurationChart(width, height, false, List.of(), null, null, null, ticksY, List.of());
+            return new DurationChart(width, height, false, List.of(), null, null, null, ticksY, List.of(),
+                    plotLeft, plotRight);
         }
         double range = max - min;
         if (range == 0) {
@@ -313,7 +349,7 @@ public final class TestTrendChartData {
         double plotBottom = height - 28;
         // Unlike the pass/fail chart, this one carries y-axis value labels down the left edge, so the
         // plotted line/points need a real left margin (DURATION_PLOT_LEFT) to start clear of that text.
-        double stepX = runs.size() <= 1 ? 0 : (double) (width - DURATION_PLOT_LEFT - 10) / (runs.size() - 1);
+        double stepX = runs.size() <= 1 ? 0 : (double) (plotRight - plotLeft) / (runs.size() - 1);
 
         double minY = mapDurationToY(min, min, range, plotTop, plotBottom);
         double maxY = mapDurationToY(max, min, range, plotTop, plotBottom);
@@ -334,15 +370,17 @@ public final class TestTrendChartData {
             if (run.getDurationSeconds() == null) {
                 continue;
             }
-            double x = DURATION_PLOT_LEFT + i * stepX;
+            double x = plotLeft + i * stepX;
             double y = mapDurationToY(run.getDurationSeconds(), min, range, plotTop, plotBottom);
             boolean flagged = run.isDurationDeviationFlag();
-            String tooltip = run.getArchivedAt() + " - " + formatDuration(run.getDurationSeconds().doubleValue())
+            String tooltip = orEmpty(run.getArchivedAt()) + " - "
+                    + formatDuration(run.getDurationSeconds().doubleValue())
                     + (flagged ? " (duration deviation)" : "");
             points.add(new DurationPoint(x, y, flagged, tooltip));
         }
-        List<DateTick> ticks = buildDateTicks(runs, width, DURATION_PLOT_LEFT);
-        return new DurationChart(width, height, true, points, minLabel, maxLabel, avgLine, ticksY, ticks);
+        List<DateTick> ticks = buildDateTicks(runs, width, plotLeft);
+        return new DurationChart(width, height, true, points, minLabel, maxLabel, avgLine, ticksY, ticks,
+                plotLeft, plotRight);
     }
 
     private static double mapDurationToY(double value, double min, double range, double plotTop, double plotBottom) {
@@ -387,5 +425,12 @@ public final class TestTrendChartData {
 
     public static String formatDuration(Double seconds) {
         return seconds == null ? "-" : String.format(Locale.ROOT, "%.1fs", seconds);
+    }
+
+    /** {@code value}, or {@code ""} for a {@code null} - both tooltip builders above concatenate
+     *  {@code archivedAt}/{@code outcome} straight from a deserialized manifest.json, which carries no
+     *  defaulting, so a plain {@code +} would otherwise render the literal text "null" into the page. */
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

@@ -131,6 +131,40 @@ class TestTrendReportWriterTest {
         return report;
     }
 
+    /** Same as {@link #manyRunsReport} but with a duration on every run, so the duration chart also
+     *  renders an {@code <svg>} (it falls back to a "no duration data" message otherwise). */
+    private static TestTrendReport manyRunsReportWithDurations(int count) {
+        TestTrendReport report = manyRunsReport(count);
+        for (int i = 0; i < report.getRuns().size(); i++) {
+            report.getRuns().get(i).setDurationSeconds((long) (40 + i));
+        }
+        return report;
+    }
+
+    @Test
+    void chartsRenderWithoutThousandsSeparatorsAtTwentyFiveOrMoreRuns() {
+        // 30 runs * CHART_WIDTH_PER_RUN (40) = 1200 - large enough that FreeMarker's default
+        // NumberFormat.getNumberInstance(Locale.ROOT) would group it as "1,200", which is not a valid
+        // SVG <length>/viewBox number (see buildFreemarkerConfig's setNumberFormat("computer")).
+        TestTrendReport report = manyRunsReportWithDurations(30);
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        String passFailChart = extractChart(html, "Pass/fail");
+        String durationChart = extractChart(html, "Duration");
+        // Only the <svg> opening tag's own width/viewBox attributes are checked for commas here - the
+        // duration chart's <polyline points="x,y x,y ..."> further down legitimately uses commas as
+        // its x/y coordinate separator, unrelated to this bug.
+        String passFailSvgTag = passFailChart.substring(0, passFailChart.indexOf('>') + 1);
+        String durationSvgTag = durationChart.substring(0, durationChart.indexOf('>') + 1);
+        assertThat(passFailSvgTag, containsString("width=\"1200\" height=\"60\""));
+        assertThat(passFailSvgTag, containsString("viewBox=\"0 0 1200 60\""));
+        assertThat(passFailSvgTag, is(not(containsString(","))));
+        assertThat(durationSvgTag, containsString("width=\"1200\" height=\"140\""));
+        assertThat(durationSvgTag, containsString("viewBox=\"0 0 1200 140\""));
+        assertThat(durationSvgTag, is(not(containsString(","))));
+    }
+
     @Test
     void consoleCapsRunsListAt100() {
         TestTrendReport report = manyRunsReport(105);
@@ -469,6 +503,21 @@ class TestTrendReportWriterTest {
         assertThat(extractChart(html, "Duration"), is(extractChart(unfilteredHtml, "Duration")));
         // But the filtered run is still listed in the table.
         assertThat(html, containsString("2026-08-20T12:00:00Z"));
+    }
+
+    @Test
+    void htmlRendersEmptyCellsInsteadOfThrowingWhenArchivedAtOrOutcomeIsNull() {
+        // Both fields come straight from deserialized manifest.json with no defaulting, and
+        // TestTrendAnalyzer.analyze already sorts with Comparator.nullsFirst(...) on archivedAt - i.e.
+        // a null archivedAt is already a reachable case, not a corner case that "can't happen".
+        TestTrendReport report = twoRunReport();
+        report.getRuns().get(0).setArchivedAt(null);
+        report.getRuns().get(1).setOutcome(null);
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, is(not(containsString("null"))));
+        assertThat(html, containsString("<td></td>"));
     }
 
     @Test

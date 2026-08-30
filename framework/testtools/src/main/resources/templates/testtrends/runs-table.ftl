@@ -23,8 +23,8 @@ under the License.
 <tbody>
 <#list runRows as row>
 <tr<#if row.run.filtered> class="row-filtered"</#if>>
-<td>${row.run.archivedAt?html}</td>
-<td>${row.run.outcome?html}</td>
+<td>${(row.run.archivedAt!'')?html}</td>
+<td>${(row.run.outcome!'')?html}</td>
 <td><#if row.run.counts??>${row.run.counts.total}<#else>-</#if></td>
 <td><#if row.run.counts??>${row.run.counts.failed}<#else>-</#if></td>
 <td><#if row.run.counts??>${row.run.counts.skipped}<#else>-</#if></td>

@@ -62,6 +62,11 @@ public final class TestTrendReportWriter {
         // ROOT locale so ?string('0.0') always renders a plain period-decimal number (no
         // locale-dependent grouping separator) for chart point coordinates.
         cfg.setLocale(Locale.ROOT);
+        // FreeMarker's default number format still groups thousands even under Locale.ROOT (e.g.
+        // bare ${chartWidth} renders "1,200"), which is not a valid SVG width/viewBox number. This
+        // "computer" format renders plain digits for every bare ${...} on a number, matching the old
+        // StringBuilder code's raw int/double output.
+        cfg.setNumberFormat("computer");
         return cfg;
     }
 

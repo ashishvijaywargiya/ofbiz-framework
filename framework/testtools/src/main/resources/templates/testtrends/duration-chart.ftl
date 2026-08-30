@@ -27,12 +27,12 @@ under the License.
 <svg width="${durationChart.width}" height="${durationChart.height}"
         viewBox="0 0 ${durationChart.width} ${durationChart.height}"
         xmlns="http://www.w3.org/2000/svg" class="trend-chart">
-<line x1="40" y1="${durationChart.minLabel.y?string('0.0')}" x2="${durationChart.width - 10}"
+<line x1="${durationChart.plotLeft}" y1="${durationChart.minLabel.y?string('0.0')}" x2="${durationChart.plotRight}"
         y2="${durationChart.minLabel.y?string('0.0')}" class="trend-gridline"/>
 <text x="0" y="${(durationChart.minLabel.y + 3)?string('0.0')}" class="trend-axis-label">${durationChart.minLabel.text?html}</text>
 <text x="0" y="${(durationChart.maxLabel.y + 3)?string('0.0')}" class="trend-axis-label">${durationChart.maxLabel.text?html}</text>
 <#if durationChart.avgLine??>
-<line x1="40" y1="${durationChart.avgLine.y?string('0.0')}" x2="${durationChart.width - 10}"
+<line x1="${durationChart.plotLeft}" y1="${durationChart.avgLine.y?string('0.0')}" x2="${durationChart.plotRight}"
         y2="${durationChart.avgLine.y?string('0.0')}" class="trend-avg-line"/>
 <text x="${durationChart.width - 8}" y="${(durationChart.avgLine.y - 3)?string('0.0')}" class="trend-axis-label"
         text-anchor="end">${durationChart.avgLine.text?html}</text>

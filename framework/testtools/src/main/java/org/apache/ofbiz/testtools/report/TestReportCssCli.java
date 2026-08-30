@@ -21,12 +21,16 @@ package org.apache.ofbiz.testtools.report;
 import java.io.File;
 
 /**
- * Entry point letting {@code test-reports.gradle}'s Groovy task code copy {@link TestReportCss}'s
- * canonical stylesheet next to its generated report, via a {@code javaexec} subprocess on
- * {@code sourceSets.main.runtimeClasspath} - the same mechanism {@code TestReportArchiverCli}/
- * {@code TestTrendReportCli} already use to call this project's Java classes from a Gradle script,
- * since a plain script-level {@code import} can't see classes this same build compiles. Never fails
- * the calling Gradle task - same swallow-and-continue stance as those two CLIs.
+ * Command-line entry point for copying {@link TestReportCss}'s canonical stylesheet next to a
+ * generated report - usable via a {@code javaexec} subprocess on
+ * {@code sourceSets.main.runtimeClasspath}, the same mechanism {@code TestReportArchiverCli}/
+ * {@code TestTrendReportCli} use to call this project's Java classes from a Gradle script, since a
+ * plain script-level {@code import} can't see classes this same build compiles. Not currently called
+ * that way: {@code test-reports.gradle}'s own {@code copyTestReportCss} does a plain Groovy file copy
+ * instead (a standalone-runnable task forking a JVM against possibly-uncompiled classes would silently
+ * degrade rather than fail loudly - see that helper's own comment). Kept as a directly testable,
+ * reusable entry point for the same copy, and never fails its caller - same swallow-and-continue
+ * stance as those two CLIs.
  *
  * <p>Usage: {@code TestReportCssCli <targetDir>}.
  */

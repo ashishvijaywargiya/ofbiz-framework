@@ -26,20 +26,20 @@ import groovy.xml.XmlSlurper
 def sysadminGroup = 'System Administration'
 
 // Copies the canonical framework/testtools/src/main/resources/templates/testreports/test-report.css
-// (see TestReportCss's javadoc) next to a generated report, via a javaexec subprocess on
-// sourceSets.main.runtimeClasspath - the same mechanism this project's other Gradle-to-Java calls
-// use (registerArchiveTestReportTask in test-report-archive.gradle, testReportTrends in
-// test-report-trends.gradle), since a plain script-level `import` can't see classes this same build
-// compiles. Used two ways: alongside test-report.html so that single-page report keeps working as a
-// plain file:// doc, and once per framed report directory alongside its many pages (referenced via a
-// same-directory relative <link>, matching how junit-report.css used to be inlined here).
+// (see TestReportCss's javadoc) next to a generated report - a plain Groovy file(...) read/copy, not
+// a javaexec subprocess against sourceSets.main.runtimeClasspath: createTestReport/
+// createFramedTestReport are standalone-runnable tasks with no dependsOn on the compile/classes
+// task, so forking a JVM against possibly-absent compiled classes would silently fail (swallowed by
+// ignoreExitValue) and leave the report unstyled with no visible error. A direct file copy has no
+// such failure mode and needs nothing built first. Used two ways: alongside test-report.html so that
+// single-page report keeps working as a plain file:// doc, and once per framed report directory
+// alongside its many pages (referenced via a same-directory relative <link>, matching how
+// junit-report.css used to be inlined here).
 def copyTestReportCss(File targetDir) {
-    javaexec {
-        classpath = sourceSets.main.runtimeClasspath
-        mainClass = 'org.apache.ofbiz.testtools.report.TestReportCssCli'
-        args targetDir.absolutePath
-        ignoreExitValue = true
-    }
+    targetDir.mkdirs()
+    def cssFile = file('framework/testtools/src/main/resources/templates/testreports/test-report.css')
+    java.nio.file.Files.copy(cssFile.toPath(), new File(targetDir, cssFile.name).toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
 }
 
 def modernReportJs() {

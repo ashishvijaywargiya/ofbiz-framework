@@ -26,8 +26,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 
 class TestTrendChartDataTest {
@@ -107,6 +109,34 @@ class TestTrendChartDataTest {
     }
 
     @Test
+    void passFailChartExposesThePlotLeftAndPlotRightTickGenerationActuallyUsed() {
+        List<TestTrendReport.Run> runs = List.of(
+                run("2026-08-20T10:00:00Z", true, 40L),
+                run("2026-08-21T10:00:00Z", false, 60L));
+
+        TestTrendChartData.PassFailChart chart = TestTrendChartData.buildPassFailChart(runs);
+
+        // buildDateTicks places its first tick at exactly plotLeft (i == 0, so x = plotLeft + 0 *
+        // stepX) - if the bean's exposed plotLeft ever drifts from the value tick generation actually
+        // used, this fails instead of only drifting visually (see buildDateTicks's javadoc warning).
+        assertThat((double) chart.getPlotLeft(), closeTo(chart.getTicks().get(0).getX(), 0.01));
+        assertThat(chart.getPlotRight(), is(chart.getWidth() - 10));
+    }
+
+    @Test
+    void durationChartExposesThePlotLeftAndPlotRightTickGenerationActuallyUsed() {
+        List<TestTrendReport.Run> runs = List.of(
+                run("2026-08-20T10:00:00Z", true, 40L),
+                run("2026-08-21T10:00:00Z", false, 60L));
+
+        TestTrendChartData.DurationChart chart = TestTrendChartData.buildDurationChart(runs, 50.0);
+
+        assertThat(chart.getPlotLeft(), is(TestTrendChartData.DURATION_PLOT_LEFT));
+        assertThat((double) chart.getPlotLeft(), closeTo(chart.getTicks().get(0).getX(), 0.01));
+        assertThat(chart.getPlotRight(), is(chart.getWidth() - 10));
+    }
+
+    @Test
     void dateTicksCapAtEightAndAlwaysIncludeTheLastRun() {
         List<TestTrendReport.Run> runs = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
@@ -117,6 +147,28 @@ class TestTrendChartDataTest {
 
         assertThat(ticks.size() <= TestTrendChartData.MAX_DATE_TICKS, is(true));
         assertThat(ticks.get(ticks.size() - 1).getLabel(), is("01-20 00:00"));
+    }
+
+    @Test
+    void buildPassFailChartTooltipHasNoLiteralNullForMissingArchivedAtOrOutcome() {
+        TestTrendReport.Run runWithNulls = new TestTrendReport.Run();
+        runWithNulls.setGreen(true);
+        // archivedAt and outcome left null, as a deserialized manifest.json can leave them.
+
+        TestTrendChartData.PassFailChart chart = TestTrendChartData.buildPassFailChart(List.of(runWithNulls));
+
+        assertThat(chart.getPoints().get(0).getTooltip(), is(not(containsString("null"))));
+    }
+
+    @Test
+    void buildDurationChartTooltipHasNoLiteralNullForMissingArchivedAt() {
+        TestTrendReport.Run runWithNullArchivedAt = new TestTrendReport.Run();
+        runWithNullArchivedAt.setDurationSeconds(40L);
+
+        TestTrendChartData.DurationChart chart =
+                TestTrendChartData.buildDurationChart(List.of(runWithNullArchivedAt), null);
+
+        assertThat(chart.getPoints().get(0).getTooltip(), is(not(containsString("null"))));
     }
 
     @Test
