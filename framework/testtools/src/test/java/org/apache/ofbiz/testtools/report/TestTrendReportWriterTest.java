@@ -21,7 +21,9 @@ package org.apache.ofbiz.testtools.report;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.ofbiz.base.lang.JSON;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 class TestTrendReportWriterTest {
 
@@ -62,6 +65,133 @@ class TestTrendReportWriterTest {
 
         report.setRuns(List.of(first, second));
         return report;
+    }
+
+    @Test
+    void consoleSummaryListsRunsNewestFirst() {
+        String summary = TestTrendReportWriter.toConsoleSummary(twoRunReport());
+
+        assertThat(summary, containsString("Runs (newest to oldest):"));
+        int newestIndex = summary.indexOf("2026-08-21T10:00:00Z");
+        int oldestIndex = summary.indexOf("2026-08-20T10:00:00Z");
+        assertThat(newestIndex, is(not(-1)));
+        assertThat(oldestIndex, is(not(-1)));
+        assertThat(newestIndex < oldestIndex, is(true));
+    }
+
+    @Test
+    void htmlListsRunsNewestFirstInTheTableButChartsStayOldestToNewest() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        int tableStart = html.indexOf("<h2>Runs");
+        int newestRowIndex = html.indexOf("2026-08-21T10:00:00Z", tableStart);
+        int oldestRowIndex = html.indexOf("2026-08-20T10:00:00Z", tableStart);
+        assertThat(newestRowIndex, is(not(-1)));
+        assertThat(oldestRowIndex, is(not(-1)));
+        assertThat(newestRowIndex < oldestRowIndex, is(true));
+
+        // The pass/fail chart itself must stay oldest-to-newest, left to right - only the table's
+        // display order changes, not the underlying chronological data the charts plot: the older,
+        // passed run's dot must be drawn (and so appear in the markup) before the newer, failed run's.
+        String chart = extractChart(html, "Pass/fail");
+        int passedDot = chart.indexOf("#0ca30c");
+        int failedDot = chart.indexOf("#d03b3b");
+        assertThat(passedDot, is(not(-1)));
+        assertThat(failedDot, is(not(-1)));
+        assertThat(passedDot < failedDot, is(true));
+    }
+
+    /** A minimal Run carrying just an archivedAt, for building large synthetic run lists. */
+    private static TestTrendReport.Run runAt(String archivedAt) {
+        TestTrendReport.Run run = new TestTrendReport.Run();
+        run.setRunId(archivedAt);
+        run.setArchivedAt(archivedAt);
+        run.setOutcome("PASSED");
+        run.setGreen(true);
+        run.setCounts(new TestRunManifest.Counts(1, 1, 0, 0));
+        return run;
+    }
+
+    private static TestTrendReport manyRunsReport(int count) {
+        TestTrendReport report = new TestTrendReport();
+        report.setSuiteName("unit");
+        report.setRunCount(count);
+        report.setNotEnoughHistory(false);
+        report.setFailureRate(0.0);
+        report.setStreakDirection("PASSING");
+        report.setStreakLength(count);
+        List<TestTrendReport.Run> runs = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            // Chronological, oldest first: run 0 is the oldest, run (count-1) the newest.
+            runs.add(runAt(String.format(Locale.ROOT, "2026-01-%02dT00:00:00Z", (i % 28) + 1)));
+        }
+        report.setRuns(runs);
+        return report;
+    }
+
+    @Test
+    void consoleCapsRunsListAt100() {
+        TestTrendReport report = manyRunsReport(105);
+        // Runs are chronological oldest-first: index 0 is the oldest of 105, outside the latest-100
+        // window; index 104 is the newest, always shown.
+        report.getRuns().get(0).setArchivedAt("1999-01-01T00:00:00Z");
+        report.getRuns().get(104).setArchivedAt("2099-01-01T00:00:00Z");
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+
+        assertThat(summary, containsString("showing latest 100 of 105"));
+        assertThat(summary, containsString("2099-01-01T00:00:00Z"));
+        assertThat(summary, is(not(containsString("1999-01-01T00:00:00Z"))));
+    }
+
+    @Test
+    void htmlCapsRunsTableAt100() {
+        TestTrendReport report = manyRunsReport(105);
+        report.getRuns().get(0).setArchivedAt("1999-01-01T00:00:00Z");
+        report.getRuns().get(104).setArchivedAt("2099-01-01T00:00:00Z");
+
+        String html = TestTrendReportWriter.toHtml(report);
+        // Scoped to the table section only: the charts intentionally still plot every archived run
+        // (only the table/list is capped - see newestFirst's javadoc), so the oldest run's timestamp
+        // legitimately still appears earlier in the page, in a chart tooltip.
+        String table = html.substring(html.indexOf("<h2>Runs"));
+        int rowCount = table.split("<tr class=\"row-filtered\"|<tr><td>").length - 1;
+
+        assertThat(html, containsString("showing latest 100 of 105"));
+        assertThat(rowCount, is(100));
+        assertThat(table, containsString("2099-01-01T00:00:00Z"));
+        assertThat(table, is(not(containsString("1999-01-01T00:00:00Z"))));
+    }
+
+    @Test
+    void passFailChartHasALegendAndPerDotTooltipsInsteadOfBareHeightEncoding() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+        String chart = extractChart(html, "Pass/fail");
+
+        // Legend: color is never the only identity cue (dataviz skill's status-color rule).
+        assertThat(html, containsString("Passed"));
+        assertThat(html, containsString("Failed"));
+        // Every dot carries a native tooltip naming its date and outcome - no more guessing what a
+        // dot means from its position alone.
+        assertThat(chart, containsString("<title>2026-08-20T10:00:00Z - PASSED"));
+        assertThat(chart, containsString("<title>2026-08-21T10:00:00Z - FAILED"));
+        // An x-axis date tick, so a reader can tell *when* without opening the table.
+        assertThat(chart, containsString("08-20"));
+    }
+
+    @Test
+    void durationChartHasYAxisLabelsAnAverageReferenceLineAndPerDotTooltips() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+        String chart = extractChart(html, "Duration");
+
+        // Actual seconds on the y-axis, not just relative dot height.
+        assertThat(chart, containsString("40.0s"));
+        assertThat(chart, containsString("60.0s"));
+        // The average reference line, labeled with the same average the summary/table report.
+        assertThat(chart, containsString("avg 50.0s"));
+        // Tooltip per dot, including the deviation-flagged one.
+        assertThat(chart, containsString("<title>2026-08-20T10:00:00Z - 40.0s"));
+        assertThat(chart, containsString("<title>2026-08-21T10:00:00Z - 60.0s (duration deviation)"));
     }
 
     @Test
@@ -178,12 +308,158 @@ class TestTrendReportWriterTest {
     @Test
     void consoleSummaryIncludesCountDecreasedAndSkippedIncreasedSuffixes() {
         TestTrendReport report = twoRunReport();
-        report.getRuns().get(1).setCountDecreasedFlag(true);
-        report.getRuns().get(1).setSkippedIncreasedFlag(true);
+        TestTrendReport.Run run = report.getRuns().get(1);
+        run.setDurationDeviationFlag(false); // isolate this test to just the two flags under test
+        run.setCountDecreasedFlag(true);
+        run.setSkippedIncreasedFlag(true);
 
         String summary = TestTrendReportWriter.toConsoleSummary(report);
 
-        assertThat(summary, containsString("[test count decreased]"));
-        assertThat(summary, containsString("[skipped increased]"));
+        assertThat(summary, containsString("[test count decreased, skipped increased]"));
+    }
+
+    @Test
+    void consoleSummaryJoinsMultipleFlagsOnOneRunWithCommaInsideASingleBracket() {
+        TestTrendReport report = twoRunReport();
+        TestTrendReport.Run run = report.getRuns().get(1);
+        run.setDurationDeviationFlag(true);
+        run.setCountDecreasedFlag(true);
+        run.setSkippedIncreasedFlag(true);
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+
+        assertThat(summary, containsString("[duration deviation, test count decreased, skipped increased]"));
+    }
+
+    @Test
+    void consoleSummaryIncludesAFlagLegendExplainingEachFlag() {
+        String summary = TestTrendReportWriter.toConsoleSummary(twoRunReport());
+
+        assertThat(summary, containsString("Flag legend:"));
+        assertThat(summary, containsString("filtered"));
+        assertThat(summary, containsString("duration deviation"));
+        assertThat(summary, containsString("test count decreased"));
+        assertThat(summary, containsString("skipped increased"));
+    }
+
+    @Test
+    void consoleSummaryNotesFilteredRunCountAndTagsFilteredRunLines() {
+        TestTrendReport report = twoRunReport();
+        report.setFilteredRunCount(1);
+        TestTrendReport.Run run = report.getRuns().get(1);
+        run.setDurationDeviationFlag(false); // isolate this test to just the filtered flag
+        run.setFiltered(true);
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+
+        assertThat(summary, containsString("1 filtered/partial"));
+        assertThat(summary, containsString("[filtered run]")); // no filterDetail set - generic fallback
+    }
+
+    @Test
+    void consoleSummaryTagsFilteredRunLineWithItsFilterDetailWhenPresent() {
+        TestTrendReport report = twoRunReport();
+        TestTrendReport.Run run = report.getRuns().get(1);
+        run.setDurationDeviationFlag(false); // isolate this test to just the filtered flag
+        run.setFiltered(true);
+        run.setFilterDetail("org.example.SomeTest");
+
+        String summary = TestTrendReportWriter.toConsoleSummary(report);
+
+        assertThat(summary, containsString("[filtered: org.example.SomeTest]"));
+    }
+
+    @Test
+    void htmlNotesFilteredRunCountAndMarksFilteredRows() {
+        TestTrendReport report = twoRunReport();
+        report.setFilteredRunCount(1);
+        report.getRuns().get(1).setFiltered(true);
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, containsString("1 filtered/partial"));
+        assertThat(html, containsString("row-filtered"));
+        assertThat(html, containsString("filtered"));
+    }
+
+    @Test
+    void htmlFlagsCellJoinsMultipleFlagsWithComma() {
+        TestTrendReport report = twoRunReport();
+        TestTrendReport.Run run = report.getRuns().get(1);
+        run.setFiltered(true);
+        run.setDurationDeviationFlag(true);
+        run.setCountDecreasedFlag(true);
+        run.setSkippedIncreasedFlag(true);
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, containsString("filtered</span>, duration, count-decrease, skipped-increase"));
+    }
+
+    @Test
+    void htmlIncludesAFlagLegendExplainingEachFlag() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        assertThat(html, containsString("Flag legend"));
+        assertThat(html, containsString("filtered"));
+        assertThat(html, containsString("duration"));
+        assertThat(html, containsString("count-decrease"));
+        assertThat(html, containsString("skipped-increase"));
+    }
+
+    @Test
+    void htmlHasAFilterColumnShowingDetailOnlyForFilteredRows() {
+        TestTrendReport report = twoRunReport();
+        report.getRuns().get(1).setFiltered(true);
+        report.getRuns().get(1).setFilterDetail("org.apache.ofbiz.base.conversion.DateTimeTests");
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, containsString("<th>Filter</th>"));
+        assertThat(html, containsString("org.apache.ofbiz.base.conversion.DateTimeTests"));
+        // The full run's own row must not carry the other row's filter detail. Its row may be the
+        // last one in the table (rows display newest-first), so the row's end is whichever comes
+        // first: the next <tr>, or (if it's the last row) the closing </table>.
+        int rowStart = html.indexOf("<tr><td>2026-08-20T10:00:00Z");
+        int nextTr = html.indexOf("<tr", rowStart + 1);
+        int tableEnd = html.indexOf("</table>", rowStart);
+        int rowEnd = (nextTr == -1 || nextTr > tableEnd) ? tableEnd : nextTr;
+        String row = html.substring(rowStart, rowEnd);
+        assertThat(row, is(not(containsString("DateTimeTests"))));
+    }
+
+    @Test
+    void chartsExcludeFilteredRunsButTheRunsTableStillListsThem() {
+        TestTrendReport report = twoRunReport();
+        // A filtered run with a wildly different outcome/duration than the full run beside it - if
+        // it leaked into the charts, the pass/fail chart would gain a 3rd point and the duration
+        // chart's range would need to stretch to fit 5s.
+        TestTrendReport.Run filtered = new TestTrendReport.Run();
+        filtered.setRunId("2026-08-20_12h00m00s_testIntegration");
+        filtered.setArchivedAt("2026-08-20T12:00:00Z");
+        filtered.setOutcome("FAILED");
+        filtered.setGreen(false);
+        filtered.setFiltered(true);
+        filtered.setCounts(new TestRunManifest.Counts(1, 0, 1, 0));
+        filtered.setDurationSeconds(5L);
+        report.setRuns(List.of(report.getRuns().get(0), filtered, report.getRuns().get(1)));
+        report.setFilteredRunCount(1);
+
+        String html = TestTrendReportWriter.toHtml(report);
+        String unfilteredHtml = TestTrendReportWriter.toHtml(twoRunReport());
+
+        // Same two full runs plotted either way - the filtered run in between contributes no extra
+        // chart point, so both charts render byte-for-byte the same as the no-filtered-run report.
+        assertThat(extractChart(html, "Pass/fail"), is(extractChart(unfilteredHtml, "Pass/fail")));
+        assertThat(extractChart(html, "Duration"), is(extractChart(unfilteredHtml, "Duration")));
+        // But the filtered run is still listed in the table.
+        assertThat(html, containsString("2026-08-20T12:00:00Z"));
+    }
+
+    private static String extractChart(String html, String heading) {
+        int start = html.indexOf("<h2>" + heading);
+        int svgStart = html.indexOf("<svg", start);
+        int svgEnd = html.indexOf("</svg>", svgStart) + "</svg>".length();
+        return html.substring(svgStart, svgEnd);
     }
 }

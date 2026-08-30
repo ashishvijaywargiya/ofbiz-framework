@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.ofbiz.base.lang.JSON;
 import org.apache.ofbiz.base.util.Debug;
@@ -44,6 +45,15 @@ import org.apache.ofbiz.base.util.Debug;
  * unmodified {@code outcome} string for display, so the rendered report and {@code trends-<suiteName>.json}
  * can legitimately show a run as its own recorded outcome even where the streak/failure-rate math
  * treated it as failing.</p>
+ *
+ * <p>{@link TestRunManifest#isFiltered() Filtered} runs (a {@code --tests SomeClass}-style narrowed
+ * selection, not the whole suite) are still included in {@link TestTrendReport#getRuns()} - each
+ * marked via {@link TestTrendReport.Run#isFiltered()} - but are excluded from every statistic:
+ * failure rate, streak, the duration baseline, and the count/skipped drift comparisons all skip
+ * over them entirely, and a filtered run itself is never flagged for duration deviation or count
+ * drift. Without this, a single-class debug run sitting between two full runs would both throw off
+ * the baseline those full runs are compared against and read as a wild, meaningless swing in its
+ * own right.</p>
  */
 public final class TestTrendAnalyzer {
 
@@ -92,15 +102,24 @@ public final class TestTrendAnalyzer {
             return report;
         }
 
-        Double averageDuration = averageDuration(manifestsChronological);
+        List<TestRunManifest> fullManifests = manifestsChronological.stream()
+                .filter(manifest -> !manifest.isFiltered())
+                .collect(Collectors.toList());
+        report.setFilteredRunCount(manifestsChronological.size() - fullManifests.size());
+
+        Double averageDuration = averageDuration(fullManifests);
         report.setAverageDurationSeconds(averageDuration);
 
         int failedCount = 0;
         List<TestTrendReport.Run> runs = new ArrayList<>();
-        TestRunManifest previous = null;
+        // Tracks the previous *full* manifest only, so a filtered run sitting in between two full
+        // runs is never used as the count/skipped-drift baseline for the full run that follows it -
+        // see the class javadoc.
+        TestRunManifest previousFull = null;
         for (TestRunManifest manifest : manifestsChronological) {
+            boolean filtered = manifest.isFiltered();
             boolean green = manifest.isGreen();
-            if (!green) {
+            if (!filtered && !green) {
                 failedCount++;
             }
 
@@ -109,34 +128,45 @@ public final class TestTrendAnalyzer {
             run.setArchivedAt(manifest.getArchivedAt());
             run.setOutcome(manifest.getOutcome());
             run.setGreen(green);
+            run.setFiltered(filtered);
+            run.setFilterDetail(filtered && manifest.getParamsUsed() != null
+                    ? manifest.getParamsUsed().get("testsFilter") : null);
             run.setCounts(manifest.getCounts());
             run.setDurationSeconds(manifest.getDurationSeconds());
-            run.setDurationDeviationFlag(isDurationDeviation(manifest.getDurationSeconds(), averageDuration,
-                    durationDeviationPercent));
+            run.setDurationDeviationFlag(!filtered && isDurationDeviation(manifest.getDurationSeconds(),
+                    averageDuration, durationDeviationPercent));
 
-            if (previous != null && previous.getCounts() != null && manifest.getCounts() != null) {
-                run.setCountDecreasedFlag(manifest.getCounts().getTotal() < previous.getCounts().getTotal());
-                run.setSkippedIncreasedFlag(manifest.getCounts().getSkipped() > previous.getCounts().getSkipped());
+            if (!filtered) {
+                if (previousFull != null && previousFull.getCounts() != null && manifest.getCounts() != null) {
+                    run.setCountDecreasedFlag(manifest.getCounts().getTotal() < previousFull.getCounts().getTotal());
+                    run.setSkippedIncreasedFlag(
+                            manifest.getCounts().getSkipped() > previousFull.getCounts().getSkipped());
+                }
+                previousFull = manifest;
             }
 
             runs.add(run);
-            previous = manifest;
         }
         report.setRuns(runs);
-        report.setFailureRate((double) failedCount / manifestsChronological.size());
+        report.setFailureRate(fullManifests.isEmpty() ? 0.0 : (double) failedCount / fullManifests.size());
 
-        List<TestTrendReport.Run> reversed = new ArrayList<>(runs);
-        Collections.reverse(reversed);
-        boolean streakGreen = reversed.get(0).isGreen();
-        int streakLength = 0;
-        for (TestTrendReport.Run run : reversed) {
-            if (run.isGreen() != streakGreen) {
-                break;
+        if (fullManifests.isEmpty()) {
+            report.setStreakDirection(null);
+            report.setStreakLength(0);
+        } else {
+            List<TestRunManifest> reversedFull = new ArrayList<>(fullManifests);
+            Collections.reverse(reversedFull);
+            boolean streakGreen = reversedFull.get(0).isGreen();
+            int streakLength = 0;
+            for (TestRunManifest manifest : reversedFull) {
+                if (manifest.isGreen() != streakGreen) {
+                    break;
+                }
+                streakLength++;
             }
-            streakLength++;
+            report.setStreakDirection(streakGreen ? "PASSING" : "FAILING");
+            report.setStreakLength(streakLength);
         }
-        report.setStreakDirection(streakGreen ? "PASSING" : "FAILING");
-        report.setStreakLength(streakLength);
 
         return report;
     }

@@ -446,6 +446,25 @@ archiveUnitTestReportProvider.configure {
                 testTaskProvider.get().state.failure != null ? 'FAILED' : 'PASSED'
         systemProperty 'test.report.results.dir', file("$buildDir/test-results/test").absolutePath
         systemProperty 'test.report.html.dir', file("$buildDir/reports/tests/test").absolutePath
+        // A `./gradlew test --tests SomeClass` run leaves build/test-results/test holding only
+        // that class's XML - Gradle's Test task manages that directory as its own @OutputDirectory
+        // and prunes out everything a narrower run didn't re-execute (verified directly: a full run
+        // leaves ~850 files there, --tests one leaves 1). Counted at face value, a run like that
+        // reads as a wild swing in trends-unit.html rather than what it actually is: a developer
+        // debugging one class. filter.commandLineIncludePatterns is TestFilterInternal, not the
+        // public TestFilter interface (whose own getIncludePatterns() only reflects patterns set via
+        // filter.includeTestsMatching(...) in a build script, never --tests), so it's read
+        // dynamically - defensively, since it's Gradle-internal and could be renamed/removed - and
+        // treated as "not filtered" if unavailable rather than failing the build over it.
+        List<String> testsFilterPatterns = []
+        try {
+            testsFilterPatterns = new ArrayList<>(testTaskProvider.get().filter.commandLineIncludePatterns)
+        } catch (Throwable ignored) {
+            // Internal Gradle API gone/renamed - fall back to treating this run as unfiltered.
+        }
+        if (!testsFilterPatterns.isEmpty()) {
+            systemProperty 'test.report.tests.filter', testsFilterPatterns.join(', ')
+        }
     }
 }
 testTaskProvider.configure {
@@ -1470,6 +1489,16 @@ def createOfbizCommandTask(taskName, arguments) {
                     systemProperty 'test.report.task.outcome',
                             tasks.named(taskName).get().state.failure != null ? 'FAILED' : 'PASSED'
                     systemProperty 'test.report.results.dir', file('./runtime/logs/test-results').absolutePath
+                    // Same reasoning as archiveUnitTestReport's --tests detection above: narrowing
+                    // args like suitename=/component=/case=/method= (see TestRunContainer.java) make
+                    // this run only execute part of the suite, so its total shouldn't read as a
+                    // baseline swing in trends-testIntegration.html. `testIntegration` itself never
+                    // passes any of these (it depends on bare 'ofbiz --test'); this only fires for a
+                    // narrowed invocation run directly, e.g. `./gradlew "ofbiz --test suitename=entity"`.
+                    List<String> testsFilterArgs = arguments.findAll { it ==~ /(?i)(suitename|component|case|method)=.*/ }
+                    if (!testsFilterArgs.isEmpty()) {
+                        systemProperty 'test.report.tests.filter', testsFilterArgs.join(', ')
+                    }
                 }
             })
         }

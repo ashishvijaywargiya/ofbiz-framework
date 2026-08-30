@@ -32,6 +32,7 @@ public final class TestTrendReport {
 
     private String suiteName;
     private int runCount;
+    private int filteredRunCount;
     private boolean notEnoughHistory;
     private double failureRate;
     private String streakDirection;
@@ -53,6 +54,19 @@ public final class TestTrendReport {
 
     public void setRunCount(int runCount) {
         this.runCount = runCount;
+    }
+
+    /**
+     * How many of {@link #getRunCount()}'s archived runs are {@link TestRunManifest#isFiltered()
+     * filtered} (a narrowed-down subset run, not the whole suite) - included in {@link #getRuns()}
+     * and marked there, but excluded from every trend statistic this report computes.
+     */
+    public int getFilteredRunCount() {
+        return filteredRunCount;
+    }
+
+    public void setFilteredRunCount(int filteredRunCount) {
+        this.filteredRunCount = filteredRunCount;
     }
 
     public boolean isNotEnoughHistory() {
@@ -109,6 +123,8 @@ public final class TestTrendReport {
         private String archivedAt;
         private String outcome;
         private boolean green;
+        private boolean filtered;
+        private String filterDetail;
         private TestRunManifest.Counts counts;
         private Long durationSeconds;
         private boolean durationDeviationFlag;
@@ -145,6 +161,30 @@ public final class TestTrendReport {
 
         public void setGreen(boolean green) {
             this.green = green;
+        }
+
+        /** Mirrors {@link TestRunManifest#isFiltered()} for this run - see that method's javadoc. */
+        public boolean isFiltered() {
+            return filtered;
+        }
+
+        public void setFiltered(boolean filtered) {
+            this.filtered = filtered;
+        }
+
+        /**
+         * The raw filter that narrowed this run - a Gradle {@code --tests} class name, or an
+         * {@code ofbiz --test suitename=}/{@code case=}/{@code method=} arg - copied verbatim from
+         * {@link TestRunManifest#getParamsUsed()}'s {@code testsFilter} entry. Null for a full run,
+         * and may be null even when {@link #isFiltered()} is true if the manifest was constructed
+         * without one (e.g. hand-built in a test).
+         */
+        public String getFilterDetail() {
+            return filterDetail;
+        }
+
+        public void setFilterDetail(String filterDetail) {
+            this.filterDetail = filterDetail;
         }
 
         public TestRunManifest.Counts getCounts() {

@@ -165,6 +165,25 @@ public final class TestRunManifest {
         return counts != null && counts.getTotal() > 0 && counts.getFailed() == 0 && "PASSED".equals(outcome);
     }
 
+    /**
+     * True when this run only executed a narrowed-down subset of its suite - a Gradle
+     * {@code ./gradlew test --tests SomeClass} filter, or an {@code ofbiz --test suitename=...}/
+     * {@code case=}/{@code method=} narrowed selection - rather than the whole configured suite.
+     * Detected via the {@code testsFilter} key in {@link #paramsUsed}, set by whichever Gradle task
+     * archived this run (see {@code build.gradle}'s {@code archiveUnitTestReportProvider} and
+     * {@code createOfbizCommandTask}) when it can tell the run was narrowed.
+     *
+     * <p>{@link TestTrendAnalyzer} excludes filtered runs from failure-rate/streak/duration-baseline
+     * math and from count-drift comparisons: a run that only ever executed 1 of 850 tests would
+     * otherwise read as a wild, meaningless swing in every trend statistic. Not part of the manifest
+     * schema (see class javadoc), so {@code @JsonIgnore} for the same reason {@link #isGreen()} has
+     * it.</p>
+     */
+    @JsonIgnore
+    public boolean isFiltered() {
+        return paramsUsed != null && paramsUsed.containsKey("testsFilter");
+    }
+
     /** Pass/fail/skip totals for one archived run. */
     public static final class Counts {
         private int total;

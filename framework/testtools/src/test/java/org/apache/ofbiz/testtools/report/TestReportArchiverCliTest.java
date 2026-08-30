@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 
+import org.apache.ofbiz.base.lang.JSON;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,7 +35,7 @@ class TestReportArchiverCliTest {
     private static final String[] PROPERTY_NAMES = {
             "test.report.base.dir", "test.report.project.dir", "test.report.suite.name",
             "test.report.source.task", "test.report.task.outcome", "test.report.results.dir",
-            "test.report.html.dir"
+            "test.report.html.dir", "test.report.tests.filter"
     };
 
     @AfterEach
@@ -66,6 +67,32 @@ class TestReportArchiverCliTest {
         File[] runDirs = dateDirs[0].listFiles();
         assertThat(runDirs != null && runDirs.length == 1, is(true));
         assertThat(new File(runDirs[0], "manifest.json").exists(), is(true));
+    }
+
+    @Test
+    void recordsTestsFilterIntoParamsUsedWhenSet(@TempDir File tmp) throws IOException {
+        File baseDir = new File(tmp, "runtime/test-reports");
+        File resultsDir = new File(tmp, "results");
+        resultsDir.mkdirs();
+        Files.writeString(new File(resultsDir, "S.xml").toPath(),
+                "<testsuite name=\"x\" tests=\"1\" failures=\"0\" errors=\"0\" skipped=\"0\"></testsuite>");
+
+        System.setProperty("test.report.base.dir", baseDir.getAbsolutePath());
+        System.setProperty("test.report.project.dir", tmp.getAbsolutePath());
+        System.setProperty("test.report.suite.name", "unit");
+        System.setProperty("test.report.source.task", "test");
+        System.setProperty("test.report.task.outcome", "PASSED");
+        System.setProperty("test.report.results.dir", resultsDir.getAbsolutePath());
+        System.setProperty("test.report.tests.filter", "org.example.SomeTest");
+
+        TestReportArchiverCli.main(new String[0]);
+
+        File dateDir = baseDir.listFiles()[0];
+        File runDir = dateDir.listFiles()[0];
+        TestRunManifest manifest = JSON.from(Files.newInputStream(new File(runDir, "manifest.json").toPath()))
+                .toObject(TestRunManifest.class);
+        assertThat(manifest.getParamsUsed().get("testsFilter"), is("org.example.SomeTest"));
+        assertThat(manifest.isFiltered(), is(true));
     }
 
     @Test

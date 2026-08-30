@@ -19,6 +19,7 @@
 package org.apache.ofbiz.testtools.report;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * Entry point invoked by the Gradle {@code archiveUnitTestReport} / {@code
@@ -36,6 +37,11 @@ import java.io.File;
  *   <li>{@code test.report.results.dir} - directory holding this run's JUnit XML, required</li>
  *   <li>{@code test.report.html.dir} - separate HTML report directory, only set when the HTML
  *       report does not already live inside test.report.results.dir</li>
+ *   <li>{@code test.report.tests.filter} - optional; set by the calling task when it can tell this
+ *       run only executed a narrowed-down subset of its suite (a Gradle {@code --tests} filter, or
+ *       an {@code ofbiz --test suitename=}/{@code case=}/{@code method=} selection). Recorded into
+ *       the manifest's {@code paramsUsed} so {@link TestRunManifest#isFiltered()} can tell filtered
+ *       runs apart from full ones - see that method's javadoc for why that distinction matters.</li>
  * </ul>
  */
 public final class TestReportArchiverCli {
@@ -53,6 +59,10 @@ public final class TestReportArchiverCli {
             File htmlDir = (htmlDirProperty == null || htmlDirProperty.isBlank())
                     ? null : new File(htmlDirProperty);
 
+            String testsFilter = System.getProperty("test.report.tests.filter");
+            Map<String, String> paramsUsed = (testsFilter == null || testsFilter.isBlank())
+                    ? Map.of() : Map.of("testsFilter", testsFilter);
+
             TestReportArchiver.ArchiveRequest request = new TestReportArchiver.ArchiveRequest(
                     new File(baseDir),
                     new File(System.getProperty("test.report.project.dir", ".")),
@@ -60,7 +70,9 @@ public final class TestReportArchiverCli {
                     System.getProperty("test.report.source.task", "unknown"),
                     System.getProperty("test.report.task.outcome", "UNKNOWN"),
                     new File(resultsDir),
-                    htmlDir);
+                    htmlDir,
+                    "gradle",
+                    paramsUsed);
 
             TestRunManifest manifest = TestReportArchiver.archive(request);
             System.out.println("TestReportArchiverCli: archived '" + suiteName + "' run to "

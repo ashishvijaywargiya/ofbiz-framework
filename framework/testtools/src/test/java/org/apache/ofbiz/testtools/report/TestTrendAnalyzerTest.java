@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.ofbiz.base.lang.JSON;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,15 @@ class TestTrendAnalyzerTest {
         manifest.setOutcome(outcome);
         manifest.setCounts(new TestRunManifest.Counts(total, total - failed - skipped, failed, skipped));
         manifest.setDurationSeconds(durationSeconds);
+        return manifest;
+    }
+
+    /** Same as {@link #manifest}, but stamped as a narrowed-down (filtered) run - see
+     * {@link TestRunManifest#isFiltered()}. */
+    private static TestRunManifest filteredManifest(String archivedAt, String outcome, int total, int failed,
+            int skipped, Long durationSeconds) {
+        TestRunManifest manifest = manifest(archivedAt, outcome, total, failed, skipped, durationSeconds);
+        manifest.setParamsUsed(Map.of("testsFilter", "org.example.SomeTest"));
         return manifest;
     }
 
@@ -144,6 +154,88 @@ class TestTrendAnalyzerTest {
         assertThat(report.getRuns().get(1).isSkippedIncreasedFlag(), is(true));
         assertThat(report.getRuns().get(2).isCountDecreasedFlag(), is(false));
         assertThat(report.getRuns().get(2).isSkippedIncreasedFlag(), is(false));
+    }
+
+    @Test
+    void filteredRunsAreExcludedFromFailureRateStreakAndDurationBaseline() {
+        List<TestRunManifest> manifests = List.of(
+                manifest("2026-08-20T00:00:00Z", "PASSED", 800, 0, 0, 50L),
+                manifest("2026-08-21T00:00:00Z", "PASSED", 800, 0, 0, 50L),
+                // A single-class debug run: FAILED, tiny count, tiny duration - if this leaked into
+                // the baseline/streak/failure-rate math it would tank all three.
+                filteredManifest("2026-08-22T00:00:00Z", "FAILED", 1, 1, 0, 1L),
+                manifest("2026-08-23T00:00:00Z", "PASSED", 800, 0, 0, 50L));
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("unit", manifests, 25);
+
+        assertThat(report.getFailureRate(), is(0.0));
+        assertThat(report.getStreakDirection(), is("PASSING"));
+        assertThat(report.getStreakLength(), is(3));
+        assertThat(report.getAverageDurationSeconds(), is(50.0));
+        assertThat(report.getFilteredRunCount(), is(1));
+        assertThat(report.getRuns(), hasSize(4));
+        assertThat(report.getRuns().get(2).isFiltered(), is(true));
+        assertThat(report.getRuns().get(0).isFiltered(), is(false));
+    }
+
+    @Test
+    void filteredRunsAreNeverFlaggedForDurationDeviation() {
+        List<TestRunManifest> manifests = List.of(
+                manifest("2026-08-20T00:00:00Z", "PASSED", 800, 0, 0, 50L),
+                manifest("2026-08-21T00:00:00Z", "PASSED", 800, 0, 0, 50L),
+                // 1s vs. a ~50s baseline would be a huge deviation if computed at all.
+                filteredManifest("2026-08-22T00:00:00Z", "PASSED", 1, 0, 0, 1L));
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("unit", manifests, 25);
+
+        assertThat(report.getRuns().get(2).isDurationDeviationFlag(), is(false));
+    }
+
+    @Test
+    void countDriftComparisonSkipsFilteredRunsAndComparesAgainstThePreviousFullRunOnly() {
+        List<TestRunManifest> manifests = List.of(
+                manifest("2026-08-20T00:00:00Z", "PASSED", 5, 0, 5, 30L), // baseline: total 5, skipped 5
+                filteredManifest("2026-08-21T00:00:00Z", "PASSED", 20, 0, 0, 1L), // total 20, skipped 0
+                manifest("2026-08-22T00:00:00Z", "PASSED", 10, 0, 1, 30L)); // total 10, skipped 1
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("unit", manifests, 25);
+
+        // Comparing the last run (10, skipped 1) against the filtered run in between (20, skipped 0)
+        // would flag count-decreased and never flag skipped-increased; comparing against the actual
+        // previous full run (5, skipped 5) does the opposite of both.
+        assertThat(report.getRuns().get(2).isCountDecreasedFlag(), is(false));
+        assertThat(report.getRuns().get(2).isSkippedIncreasedFlag(), is(false));
+        // The filtered run itself is never flagged either way.
+        assertThat(report.getRuns().get(1).isCountDecreasedFlag(), is(false));
+        assertThat(report.getRuns().get(1).isSkippedIncreasedFlag(), is(false));
+    }
+
+    @Test
+    void filteredRunCarriesItsFilterDetailFromParamsUsedButAFullRunDoesNot() {
+        List<TestRunManifest> manifests = List.of(
+                manifest("2026-08-20T00:00:00Z", "PASSED", 800, 0, 0, 50L),
+                filteredManifest("2026-08-21T00:00:00Z", "PASSED", 1, 0, 0, 1L));
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("unit", manifests, 25);
+
+        assertThat(report.getRuns().get(0).getFilterDetail(), nullValue());
+        assertThat(report.getRuns().get(1).getFilterDetail(), is("org.example.SomeTest"));
+    }
+
+    @Test
+    void reportsZeroFailureRateAndNullStreakWhenEveryArchivedRunIsFiltered() {
+        List<TestRunManifest> manifests = List.of(
+                filteredManifest("2026-08-20T00:00:00Z", "FAILED", 1, 1, 0, 1L),
+                filteredManifest("2026-08-21T00:00:00Z", "FAILED", 1, 1, 0, 1L));
+
+        TestTrendReport report = TestTrendAnalyzer.analyzeManifests("unit", manifests, 25);
+
+        assertThat(report.isNotEnoughHistory(), is(false)); // 2 runs archived, just none of them full
+        assertThat(report.getFilteredRunCount(), is(2));
+        assertThat(report.getFailureRate(), is(0.0));
+        assertThat(report.getStreakDirection(), nullValue());
+        assertThat(report.getStreakLength(), is(0));
+        assertThat(report.getAverageDurationSeconds(), nullValue());
     }
 
     @Test
