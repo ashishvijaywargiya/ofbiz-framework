@@ -93,9 +93,11 @@ class TestTrendReportWriterTest {
         // The pass/fail chart itself must stay oldest-to-newest, left to right - only the table's
         // display order changes, not the underlying chronological data the charts plot: the older,
         // passed run's dot must be drawn (and so appear in the markup) before the newer, failed run's.
+        // Dots are now colored via CSS classes (trend-dot-pass/trend-dot-fail), not raw hex fills -
+        // see test-report.css's javadoc for why.
         String chart = extractChart(html, "Pass/fail");
-        int passedDot = chart.indexOf("#0ca30c");
-        int failedDot = chart.indexOf("#d03b3b");
+        int passedDot = chart.indexOf("trend-dot-pass");
+        int failedDot = chart.indexOf("trend-dot-fail");
         assertThat(passedDot, is(not(-1)));
         assertThat(failedDot, is(not(-1)));
         assertThat(passedDot < failedDot, is(true));
@@ -151,16 +153,19 @@ class TestTrendReportWriterTest {
         report.getRuns().get(104).setArchivedAt("2099-01-01T00:00:00Z");
 
         String html = TestTrendReportWriter.toHtml(report);
-        // Scoped to the table section only: the charts intentionally still plot every archived run
-        // (only the table/list is capped - see newestFirst's javadoc), so the oldest run's timestamp
-        // legitimately still appears earlier in the page, in a chart tooltip.
+        // Scoped to the table's <tbody> only: the charts intentionally still plot every archived run
+        // (only the table/list is capped - see TestTrendReportModel.newestFirst's javadoc), so the
+        // oldest run's timestamp legitimately still appears earlier in the page, in a chart tooltip.
+        // Counted by "<tr" occurrences rather than assuming any particular whitespace/attribute
+        // layout around each row's opening tag.
         String table = html.substring(html.indexOf("<h2>Runs"));
-        int rowCount = table.split("<tr class=\"row-filtered\"|<tr><td>").length - 1;
+        String tbody = table.substring(table.indexOf("<tbody>"));
+        int rowCount = tbody.split("<tr").length - 1;
 
         assertThat(html, containsString("showing latest 100 of 105"));
         assertThat(rowCount, is(100));
-        assertThat(table, containsString("2099-01-01T00:00:00Z"));
-        assertThat(table, is(not(containsString("1999-01-01T00:00:00Z"))));
+        assertThat(tbody, containsString("2099-01-01T00:00:00Z"));
+        assertThat(tbody, is(not(containsString("1999-01-01T00:00:00Z"))));
     }
 
     @Test
@@ -264,6 +269,9 @@ class TestTrendReportWriterTest {
         assertThat(new File(tmp, "trends-testIntegration.html").exists(), is(true));
         assertThat(Files.readString(new File(tmp, "trends-testIntegration.json").toPath()),
                 containsString("testIntegration"));
+        // write() also copies the shared stylesheet alongside the report - same mechanism
+        // TestReportCssTest already exercises directly.
+        assertThat(new File(tmp, "test-report.css").exists(), is(true));
     }
 
     @Test
@@ -417,13 +425,20 @@ class TestTrendReportWriterTest {
 
         assertThat(html, containsString("<th>Filter</th>"));
         assertThat(html, containsString("org.apache.ofbiz.base.conversion.DateTimeTests"));
-        // The full run's own row must not carry the other row's filter detail. Its row may be the
-        // last one in the table (rows display newest-first), so the row's end is whichever comes
-        // first: the next <tr>, or (if it's the last row) the closing </table>.
-        int rowStart = html.indexOf("<tr><td>2026-08-20T10:00:00Z");
-        int nextTr = html.indexOf("<tr", rowStart + 1);
-        int tableEnd = html.indexOf("</table>", rowStart);
-        int rowEnd = (nextTr == -1 || nextTr > tableEnd) ? tableEnd : nextTr;
+        // The full run's own row must not carry the other row's filter detail. Found by locating the
+        // <tr> immediately before this run's archivedAt text, without assuming any particular
+        // whitespace between the <tr> tag and its first <td> - its row may be the last one in the
+        // table (rows display newest-first), so the row's end is whichever comes first: the next
+        // <tr>, or (if it's the last row) the closing </tbody>.
+        // Scoped to the table (search starts at "<h2>Runs"), not the whole page: the same archivedAt
+        // timestamp also appears earlier, in this run's pass/fail and duration chart tooltips - an
+        // unscoped search would find that chart occurrence instead of the table row.
+        int tableStart = html.indexOf("<h2>Runs");
+        int anchor = html.indexOf("2026-08-20T10:00:00Z", tableStart);
+        int rowStart = html.lastIndexOf("<tr", anchor);
+        int nextTr = html.indexOf("<tr", anchor);
+        int tbodyEnd = html.indexOf("</tbody>", anchor);
+        int rowEnd = (nextTr == -1 || nextTr > tbodyEnd) ? tbodyEnd : nextTr;
         String row = html.substring(rowStart, rowEnd);
         assertThat(row, is(not(containsString("DateTimeTests"))));
     }
@@ -454,6 +469,22 @@ class TestTrendReportWriterTest {
         assertThat(extractChart(html, "Duration"), is(extractChart(unfilteredHtml, "Duration")));
         // But the filtered run is still listed in the table.
         assertThat(html, containsString("2026-08-20T12:00:00Z"));
+    }
+
+    @Test
+    void htmlLinksTheSharedStylesheetInsteadOfInliningCss() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        assertThat(html, containsString("<link rel=\"stylesheet\" href=\"test-report.css\">"));
+        assertThat(html, is(not(containsString("<style>"))));
+    }
+
+    @Test
+    void htmlUsesTheSharedBootstrapStyleStatCardsAndTableClasses() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        assertThat(html, containsString("class=\"stat-cards\""));
+        assertThat(html, containsString("class=\"bs-table\""));
     }
 
     private static String extractChart(String html, String heading) {
