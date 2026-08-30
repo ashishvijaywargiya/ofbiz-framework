@@ -23,14 +23,14 @@ under the License.
 <tbody>
 <#list runRows as row>
 <tr<#if row.run.filtered> class="row-filtered"</#if>>
-<td>${(row.run.archivedAt!'')?html}</td>
-<td>${(row.run.outcome!'')?html}</td>
+<td>${row.archivedAtText?html}</td>
+<td<#if (row.run.outcome!'') == 'FAILED'> class="outcome-failed"</#if>>${(row.run.outcome!'')?html}</td>
 <td><#if row.run.counts??>${row.run.counts.total}<#else>-</#if></td>
 <td><#if row.run.counts??>${row.run.counts.failed}<#else>-</#if></td>
 <td><#if row.run.counts??>${row.run.counts.skipped}<#else>-</#if></td>
 <td>${row.durationText?html}</td>
 <td class="flag"><#list row.flags as flag><#if flag.muted><span class="flag-filtered">${flag.label?html}</span><#else>${flag.label?html}</#if><#if flag_has_next>, </#if></#list></td>
-<td><#if row.run.filterDetail??>${row.run.filterDetail?html}</#if></td>
+<td class="filter-detail"><#if row.run.filterDetail??>${row.run.filterDetail?html}</#if></td>
 </tr>
 </#list>
 </tbody>

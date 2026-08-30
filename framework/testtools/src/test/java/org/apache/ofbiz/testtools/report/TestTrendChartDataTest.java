@@ -63,7 +63,8 @@ class TestTrendChartDataTest {
         assertThat(chart.getPoints().get(0).getStatus(), is("pass"));
         assertThat(chart.getPoints().get(1).getX(), closeTo(390.0, 0.01));
         assertThat(chart.getPoints().get(1).getStatus(), is("fail"));
-        assertThat(chart.getPoints().get(0).getTooltip(), is("2026-08-20T10:00:00Z - PASSED (40.0s)"));
+        assertThat(chart.getPoints().get(0).getTooltip(),
+                is(TestTrendChartData.formatDisplayDateTime("2026-08-20T10:00:00Z") + " - PASSED (40.0s)"));
     }
 
     @Test
@@ -105,7 +106,8 @@ class TestTrendChartDataTest {
         assertThat(chart.getMinLabel().getText(), is("40.0s"));
         assertThat(chart.getMaxLabel().getText(), is("60.0s"));
         assertThat(chart.getPoints().get(1).isFlagged(), is(true));
-        assertThat(chart.getPoints().get(1).getTooltip(), is("2026-08-21T10:00:00Z - 60.0s (duration deviation)"));
+        assertThat(chart.getPoints().get(1).getTooltip(), is(TestTrendChartData.formatDisplayDateTime("2026-08-21T10:00:00Z")
+                + " - 60.0s (duration deviation)"));
     }
 
     @Test
@@ -146,7 +148,8 @@ class TestTrendChartDataTest {
         List<TestTrendChartData.DateTick> ticks = TestTrendChartData.buildDateTicks(runs, 800, 10);
 
         assertThat(ticks.size() <= TestTrendChartData.MAX_DATE_TICKS, is(true));
-        assertThat(ticks.get(ticks.size() - 1).getLabel(), is("01-20 00:00"));
+        assertThat(ticks.get(ticks.size() - 1).getLabel(),
+                is(TestTrendChartData.formatTickDate("2026-01-20T00:00:00Z")));
     }
 
     @Test
@@ -175,5 +178,19 @@ class TestTrendChartDataTest {
     void formatDurationHandlesNullAndNumericValues() {
         assertThat(TestTrendChartData.formatDuration(null), is("-"));
         assertThat(TestTrendChartData.formatDuration(12.34), is("12.3s"));
+    }
+
+    @Test
+    void formatDisplayDateTimeUsesTwentyFourHourYyyyMmDdHhMmSsAndHandlesNullAndMalformedInput() {
+        String formatted = TestTrendChartData.formatDisplayDateTime("2026-08-20T10:00:00Z");
+
+        assertThat(formatted.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"), is(true));
+        // No "T"/"Z" ISO-8601 punctuation survives into the display form.
+        assertThat(formatted, is(not(containsString("T"))));
+        assertThat(formatted, is(not(containsString("Z"))));
+        // Null and malformed input fall back gracefully instead of throwing (a deserialized
+        // manifest.json can leave archivedAt null - same contract as formatTickDate).
+        assertThat(TestTrendChartData.formatDisplayDateTime(null), is(""));
+        assertThat(TestTrendChartData.formatDisplayDateTime("not-a-date"), is("not-a-date"));
     }
 }

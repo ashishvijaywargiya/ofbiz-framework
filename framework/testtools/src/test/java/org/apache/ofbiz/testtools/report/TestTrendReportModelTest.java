@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 
 class TestTrendReportModelTest {
@@ -101,6 +102,17 @@ class TestTrendReportModelTest {
         TestTrendReportModel.RunRow plainRow = runRows.get(1);
         assertThat(plainRow.getFlags(), is(List.of()));
         assertThat(plainRow.getDurationText(), is("40.0s"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildRunRowFormatsArchivedAtForDisplayInsteadOfLeavingTheRawIsoString() {
+        Map<String, Object> model = TestTrendReportModel.build(twoRunReport());
+
+        List<TestTrendReportModel.RunRow> runRows = (List<TestTrendReportModel.RunRow>) model.get("runRows");
+        TestTrendReportModel.RunRow row = runRows.get(0);
+        assertThat(row.getArchivedAtText(), is(TestTrendChartData.formatDisplayDateTime(row.getRun().getArchivedAt())));
+        assertThat(row.getArchivedAtText(), is(not(row.getRun().getArchivedAt())));
     }
 
     @Test

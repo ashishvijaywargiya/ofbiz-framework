@@ -60,4 +60,35 @@ class TestReportCssTest {
 
         assertThat(new File(tmp, TestReportCss.FILE_NAME).exists(), is(true));
     }
+
+    @Test
+    void trendChartRuleScalesToFitInsteadOfForcingHorizontalPageScroll(@TempDir File tmp) throws IOException {
+        TestReportCss.copyTo(tmp);
+
+        String css = Files.readString(new File(tmp, TestReportCss.FILE_NAME).toPath());
+
+        assertThat(css, containsString(".trend-chart"));
+        assertThat(css, containsString("max-width: 100%"));
+        assertThat(css, containsString("height: auto"));
+    }
+
+    @Test
+    void filterDetailRuleWrapsLongTextInsteadOfWideningTheTable(@TempDir File tmp) throws IOException {
+        TestReportCss.copyTo(tmp);
+
+        String css = Files.readString(new File(tmp, TestReportCss.FILE_NAME).toPath());
+
+        assertThat(css, containsString(".filter-detail"));
+        assertThat(css, containsString("overflow-wrap"));
+    }
+
+    @Test
+    void outcomeFailedRuleUsesTheDangerColor(@TempDir File tmp) throws IOException {
+        TestReportCss.copyTo(tmp);
+
+        String css = Files.readString(new File(tmp, TestReportCss.FILE_NAME).toPath());
+
+        assertThat(css, containsString(".outcome-failed"));
+        assertThat(css, containsString("var(--bs-danger)"));
+    }
 }

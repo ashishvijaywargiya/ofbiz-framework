@@ -84,8 +84,8 @@ class TestTrendReportWriterTest {
         String html = TestTrendReportWriter.toHtml(twoRunReport());
 
         int tableStart = html.indexOf("<h2>Runs");
-        int newestRowIndex = html.indexOf("2026-08-21T10:00:00Z", tableStart);
-        int oldestRowIndex = html.indexOf("2026-08-20T10:00:00Z", tableStart);
+        int newestRowIndex = html.indexOf(displayDate("2026-08-21T10:00:00Z"), tableStart);
+        int oldestRowIndex = html.indexOf(displayDate("2026-08-20T10:00:00Z"), tableStart);
         assertThat(newestRowIndex, is(not(-1)));
         assertThat(oldestRowIndex, is(not(-1)));
         assertThat(newestRowIndex < oldestRowIndex, is(true));
@@ -101,6 +101,13 @@ class TestTrendReportWriterTest {
         assertThat(passedDot, is(not(-1)));
         assertThat(failedDot, is(not(-1)));
         assertThat(passedDot < failedDot, is(true));
+    }
+
+    /** The HTML table/tooltip display form of an ISO-8601 archivedAt string - same code path
+     *  production uses ({@link TestTrendChartData#formatDisplayDateTime}), so assertions against it
+     *  don't hardcode a particular time zone's local time. */
+    private static String displayDate(String archivedAtIso) {
+        return TestTrendChartData.formatDisplayDateTime(archivedAtIso);
     }
 
     /** A minimal Run carrying just an archivedAt, for building large synthetic run lists. */
@@ -198,8 +205,8 @@ class TestTrendReportWriterTest {
 
         assertThat(html, containsString("showing latest 100 of 105"));
         assertThat(rowCount, is(100));
-        assertThat(tbody, containsString("2099-01-01T00:00:00Z"));
-        assertThat(tbody, is(not(containsString("1999-01-01T00:00:00Z"))));
+        assertThat(tbody, containsString(displayDate("2099-01-01T00:00:00Z")));
+        assertThat(tbody, is(not(containsString(displayDate("1999-01-01T00:00:00Z")))));
     }
 
     @Test
@@ -212,8 +219,8 @@ class TestTrendReportWriterTest {
         assertThat(html, containsString("Failed"));
         // Every dot carries a native tooltip naming its date and outcome - no more guessing what a
         // dot means from its position alone.
-        assertThat(chart, containsString("<title>2026-08-20T10:00:00Z - PASSED"));
-        assertThat(chart, containsString("<title>2026-08-21T10:00:00Z - FAILED"));
+        assertThat(chart, containsString("<title>" + displayDate("2026-08-20T10:00:00Z") + " - PASSED"));
+        assertThat(chart, containsString("<title>" + displayDate("2026-08-21T10:00:00Z") + " - FAILED"));
         // An x-axis date tick, so a reader can tell *when* without opening the table.
         assertThat(chart, containsString("08-20"));
     }
@@ -229,8 +236,8 @@ class TestTrendReportWriterTest {
         // The average reference line, labeled with the same average the summary/table report.
         assertThat(chart, containsString("avg 50.0s"));
         // Tooltip per dot, including the deviation-flagged one.
-        assertThat(chart, containsString("<title>2026-08-20T10:00:00Z - 40.0s"));
-        assertThat(chart, containsString("<title>2026-08-21T10:00:00Z - 60.0s (duration deviation)"));
+        assertThat(chart, containsString("<title>" + displayDate("2026-08-20T10:00:00Z") + " - 40.0s"));
+        assertThat(chart, containsString("<title>" + displayDate("2026-08-21T10:00:00Z") + " - 60.0s (duration deviation)"));
     }
 
     @Test
@@ -252,7 +259,7 @@ class TestTrendReportWriterTest {
 
         assertThat(html, containsString("testIntegration"));
         assertThat(html, containsString("FAILING"));
-        assertThat(html, containsString("2026-08-21T10:00:00Z"));
+        assertThat(html, containsString(displayDate("2026-08-21T10:00:00Z")));
         assertThat(html, containsString("<svg"));
     }
 
@@ -468,7 +475,7 @@ class TestTrendReportWriterTest {
         // timestamp also appears earlier, in this run's pass/fail and duration chart tooltips - an
         // unscoped search would find that chart occurrence instead of the table row.
         int tableStart = html.indexOf("<h2>Runs");
-        int anchor = html.indexOf("2026-08-20T10:00:00Z", tableStart);
+        int anchor = html.indexOf(displayDate("2026-08-20T10:00:00Z"), tableStart);
         int rowStart = html.lastIndexOf("<tr", anchor);
         int nextTr = html.indexOf("<tr", anchor);
         int tbodyEnd = html.indexOf("</tbody>", anchor);
@@ -502,7 +509,7 @@ class TestTrendReportWriterTest {
         assertThat(extractChart(html, "Pass/fail"), is(extractChart(unfilteredHtml, "Pass/fail")));
         assertThat(extractChart(html, "Duration"), is(extractChart(unfilteredHtml, "Duration")));
         // But the filtered run is still listed in the table.
-        assertThat(html, containsString("2026-08-20T12:00:00Z"));
+        assertThat(html, containsString(displayDate("2026-08-20T12:00:00Z")));
     }
 
     @Test
@@ -534,6 +541,50 @@ class TestTrendReportWriterTest {
 
         assertThat(html, containsString("class=\"stat-cards\""));
         assertThat(html, containsString("class=\"bs-table\""));
+    }
+
+    @Test
+    void htmlShowsArchivedAtAsYyyyMmDdHhMmSsInsteadOfTheRawIsoInstantString() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        String table = html.substring(html.indexOf("<h2>Runs"));
+        assertThat(table, containsString(displayDate("2026-08-21T10:00:00Z")));
+        // The raw ISO-8601 instant (with its "T"/"Z") must not survive into the table.
+        assertThat(table, is(not(containsString("2026-08-21T10:00:00Z"))));
+        assertThat(displayDate("2026-08-21T10:00:00Z").matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"),
+                is(true));
+    }
+
+    @Test
+    void failedOutcomeGetsARedTextCssClassInTheRunsTablePassedDoesNot() {
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        assertThat(html, containsString("<td class=\"outcome-failed\">FAILED</td>"));
+        assertThat(html, is(not(containsString("class=\"outcome-failed\">PASSED"))));
+    }
+
+    @Test
+    void longFilterDetailColumnGetsAWrappingCssClassInsteadOfWideningTheTable() {
+        TestTrendReport report = twoRunReport();
+        report.getRuns().get(1).setFiltered(true);
+        report.getRuns().get(1).setFilterDetail(
+                "org.apache.ofbiz.testtools.report.TestTrendReportWriterTest.someVeryLongMethodName");
+
+        String html = TestTrendReportWriter.toHtml(report);
+
+        assertThat(html, containsString("<td class=\"filter-detail\">"));
+    }
+
+    @Test
+    void chartSvgsCarryTheResponsiveCssClassInsteadOfAFixedPixelDisplaySize() {
+        // The <svg> elements' own width/height attributes still hold their real pixel geometry (the
+        // chart data-model builders' math depends on it), but test-report.css's .trend-chart rule
+        // (asserted directly in TestReportCssTest) scales the rendered element down to fit its
+        // container - both charts must carry that class for the rule to apply.
+        String html = TestTrendReportWriter.toHtml(twoRunReport());
+
+        assertThat(extractChart(html, "Pass/fail"), containsString("class=\"trend-chart\""));
+        assertThat(extractChart(html, "Duration"), containsString("class=\"trend-chart\""));
     }
 
     private static String extractChart(String html, String heading) {

@@ -19,7 +19,7 @@
 package org.apache.ofbiz.testtools.report;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -307,7 +307,7 @@ public final class TestTrendChartData {
         for (int i = 0; i < runs.size(); i++) {
             TestTrendReport.Run run = runs.get(i);
             double x = plotLeft + i * stepX;
-            String tooltip = orEmpty(run.getArchivedAt()) + " - " + orEmpty(run.getOutcome())
+            String tooltip = formatDisplayDateTime(run.getArchivedAt()) + " - " + orEmpty(run.getOutcome())
                     + (run.getDurationSeconds() == null ? ""
                             : " (" + formatDuration(run.getDurationSeconds().doubleValue()) + ")");
             points.add(new PassFailPoint(x, PASS_FAIL_BASELINE_Y, run.isGreen() ? "pass" : "fail", tooltip));
@@ -373,7 +373,7 @@ public final class TestTrendChartData {
             double x = plotLeft + i * stepX;
             double y = mapDurationToY(run.getDurationSeconds(), min, range, plotTop, plotBottom);
             boolean flagged = run.isDurationDeviationFlag();
-            String tooltip = orEmpty(run.getArchivedAt()) + " - "
+            String tooltip = formatDisplayDateTime(run.getArchivedAt()) + " - "
                     + formatDuration(run.getDurationSeconds().doubleValue())
                     + (flagged ? " (duration deviation)" : "");
             points.add(new DurationPoint(x, y, flagged, tooltip));
@@ -409,16 +409,35 @@ public final class TestTrendChartData {
         return ticks;
     }
 
-    private static String formatTickDate(String archivedAtIso) {
+    // Package-private (not private) so TestTrendChartDataTest can compute an expected tick label
+    // without hardcoding a particular time zone's local time (the tick's zone is now the system
+    // default - see formatDisplayDateTime's javadoc for why - not the fixed UTC it used to be).
+    static String formatTickDate(String archivedAtIso) {
         try {
             // Includes time-of-day, not just the date: a suite this frequently archived (several
             // runs an hour during active dev) would otherwise show the same "08-29" on most of its
             // (at most MAX_DATE_TICKS) ticks, defeating the point of labeling them individually.
-            return DateTimeFormatter.ofPattern("MM-dd HH:mm", Locale.ROOT).withZone(ZoneOffset.UTC)
+            return DateTimeFormatter.ofPattern("MM-dd HH:mm", Locale.ROOT).withZone(ZoneId.systemDefault())
                     .format(Instant.parse(archivedAtIso));
         } catch (Exception e) {
             // Malformed/missing timestamp (shouldn't happen for a real archived manifest) - fall back
             // to whatever's there rather than let one bad tick take down the whole chart.
+            return archivedAtIso == null ? "" : archivedAtIso;
+        }
+    }
+
+    /**
+     * Formats an archived-at ISO-8601 instant string as {@code yyyy-MM-dd HH:mm:ss} (24-hour) in the
+     * system default time zone, for every human-facing date display on the HTML report (the runs
+     * table's Archived at column, both charts' tooltips) - one shared format so a reader never sees
+     * the same run's timestamp rendered two different ways on the same page. Falls back to whatever
+     * was there on a malformed/missing timestamp, same as {@link #formatTickDate}.
+     */
+    public static String formatDisplayDateTime(String archivedAtIso) {
+        try {
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT).withZone(ZoneId.systemDefault())
+                    .format(Instant.parse(archivedAtIso));
+        } catch (Exception e) {
             return archivedAtIso == null ? "" : archivedAtIso;
         }
     }

@@ -61,16 +61,19 @@ public final class TestTrendReportModel {
         }
     }
 
-    /** One run-table row: the run bean itself, its flag tags in display order, and its formatted duration. */
+    /** One run-table row: the run bean itself, its flag tags in display order, and its formatted
+     *  duration/archived-at display strings. */
     public static final class RunRow {
         private final TestTrendReport.Run run;
         private final List<FlagTag> flags;
         private final String durationText;
+        private final String archivedAtText;
 
-        RunRow(TestTrendReport.Run run, List<FlagTag> flags, String durationText) {
+        RunRow(TestTrendReport.Run run, List<FlagTag> flags, String durationText, String archivedAtText) {
             this.run = run;
             this.flags = flags;
             this.durationText = durationText;
+            this.archivedAtText = archivedAtText;
         }
 
         public TestTrendReport.Run getRun() {
@@ -83,6 +86,13 @@ public final class TestTrendReportModel {
 
         public String getDurationText() {
             return durationText;
+        }
+
+        /** {@code run.archivedAt} formatted as {@code yyyy-MM-dd HH:mm:ss} in the system default time
+         *  zone (see {@link TestTrendChartData#formatDisplayDateTime}) - the runs table shows this
+         *  instead of the raw ISO-8601 instant string. */
+        public String getArchivedAtText() {
+            return archivedAtText;
         }
     }
 
@@ -133,7 +143,8 @@ public final class TestTrendReportModel {
         }
         String durationText = run.getDurationSeconds() == null ? "-"
                 : TestTrendChartData.formatDuration(run.getDurationSeconds().doubleValue());
-        return new RunRow(run, flags, durationText);
+        String archivedAtText = TestTrendChartData.formatDisplayDateTime(run.getArchivedAt());
+        return new RunRow(run, flags, durationText, archivedAtText);
     }
 
     /**
