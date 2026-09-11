@@ -464,7 +464,7 @@ function initDateTimePicker(self) {
 function addSelectAllObserver(action_checkbox) {
     var form_fields = getFormFields(getForm(action_checkbox));
         all_child = form_fields.filter(":checkbox:not(:disabled):not(.selectAll)"),
-        select_child = all_child.filter(".selectAllChild").size() > 0 ? all_child.filter(".selectAllChild") : all_child,
+        select_child = all_child.filter(".selectAllChild").length > 0 ? all_child.filter(".selectAllChild") : all_child,
         parent_checkbox = form_fields.filter(".selectAll"),
         is_parent = action_checkbox.is(".selectAll");
 
@@ -475,7 +475,7 @@ function addSelectAllObserver(action_checkbox) {
         });
     } else {
         // Check/ Uncheck parent checkbox when child checkboxes checked.
-        if (select_child.size() > 0) {
+        if (select_child.length > 0) {
             var all_checked = true;
 
             select_child.each(function () {
@@ -508,7 +508,7 @@ function getFormFields(element) {
 function getForm(element) {
     const formId = jQuery(element).attr('form');
     // Get closest form if no form id specified else get the form using id.
-    if (formId === undefined) {
+    if (!formId) {
         return jQuery(element).closest('form');
     } else {
         return jQuery('#' + formId);
@@ -930,6 +930,9 @@ function ajaxAutoCompleter(areaCsvString, showDescription, defaultMinLength, def
         else
             var url = initUrl + "?" + areaArray[i + 2];
         var div = areaArray[i];
+        if (!div) {
+            continue;
+        }
         // create a separated div where the result JSON Opbject will be placed
         if ((jQuery("#" + div + "_auto")).length < 1) {
             jQuery("<div id='" + div + "_auto'></div>").insertBefore("#" + areaArray[i]);
@@ -940,7 +943,7 @@ function ajaxAutoCompleter(areaCsvString, showDescription, defaultMinLength, def
             delay: defaultDelay,
             source: function (request, response) {
                 var queryArgs = { "term": request.term };
-                if (typeof args == "object" && jQuery.isArray(args)) {
+                if (typeof args == "object" && Array.isArray(args)) {
                     for (var i = 0; i < args.length; i++) {
                         queryArgs["parm" + i] = DOMPurify.sanitize(jQuery(args[i]).val())
                     }
@@ -1007,6 +1010,9 @@ function ajaxAutoCompleter(areaCsvString, showDescription, defaultMinLength, def
 }
 
 function setLookDescription(textFieldId, description, params, formName, showDescription) {
+    if (!textFieldId) {
+        return;
+    }
     if (description) {
         var start = description.lastIndexOf(' [');
         if (start != -1) {
@@ -1218,6 +1224,9 @@ function toggleScreenlet(link, areaId, saveCollapsed, expandTxt, collapseTxt) {
  */
 
 function ajaxInPlaceEditDisplayField(element, url, options) {
+    if (!element) {
+        return;
+    }
     var jElement = jQuery("#" + element);
     jElement.mouseover(function () {
         jQuery(this).css('background-color', 'rgb(255, 255, 153)');
@@ -1227,13 +1236,13 @@ function ajaxInPlaceEditDisplayField(element, url, options) {
         jQuery(this).css('background-color', 'transparent');
     });
 
-    importLibrary(["/common/js/jquery/plugins/jeditable/jquery.jeditable-1.7.3.js"], function () {
+    importLibrary(["/common/js/node_modules/jquery-jeditable/dist/jquery.jeditable.min.js"], function () {
         jElement.editable(function (value, settings) {
             // removes all line breaks from the value param, because the parseJSON Function can't work with line breaks
             value = value.replace(/\n/g, " ");
             value = value.replace(/\"/g, "&quot;");
 
-            var resultField = jQuery.parseJSON('{"' + settings.name + '":"' + value + '"}');
+            var resultField = JSON.parse('{"' + settings.name + '":"' + value + '"}');
             // merge both parameter objects together
             jQuery.extend(settings.submitdata, resultField);
             jQuery.ajax({
@@ -1319,27 +1328,23 @@ function showjGrowlMessage(errMessage, classEvent, stickyValue, showAllLabel, co
         if (!hideAllLabel) hideAllLabel = jGrowlLabelObject[0];
     }
 
-    var libraryFiles = ["/common/js/jquery/plugins/Readmore.js-master/readmore.js",
-        "/common/js/jquery/plugins/jquery-jgrowl/jquery.jgrowl-1.4.6.min.js"];
-    importLibrary(libraryFiles, function () {
-        $.jGrowl.defaults.closerTemplate = '<div class="closeAllJGrowl">' + hideAllLabel + '</div>';
-        if (jGrowlPosition !== null && jGrowlPosition !== undefined) $.jGrowl.defaults.position = jGrowlPosition;
-        $.jGrowl(errMessage, {
-            theme: classEvent, sticky: stickyValue,
-            beforeOpen: function (e, m, o) {
-                if (jGrowlWidth !== null && jGrowlWidth !== undefined) $(e).width(jGrowlWidth + 'px');
-                if (jGrowlHeight !== null && jGrowlHeight !== undefined) $(e).height(jGrowlHeight + 'px');
-            },
-            afterOpen: function (e, m) {
-                jQuery(".jGrowl-message").readmore({
-                    moreLink: '<a href="#" style="display: block; width: auto; padding: 0px;text-align: right; margin-top: 10px; color: #ffffff; font-size: 0.8em">' + showAllLabel + '</a>',
-                    lessLink: '<a href="#" style="display: block; width: auto; padding: 0px;text-align: right; margin-top: 10px; color: #ffffff; font-size: 0.8em">' + collapseLabel + '</a>',
+    $.jGrowl.defaults.closerTemplate = '<div class="closeAllJGrowl">' + hideAllLabel + '</div>';
+    if (jGrowlPosition !== null && jGrowlPosition !== undefined) $.jGrowl.defaults.position = jGrowlPosition;
+    $.jGrowl(errMessage, {
+        theme: classEvent, sticky: stickyValue,
+        beforeOpen: function (e, m, o) {
+            if (jGrowlWidth !== null && jGrowlWidth !== undefined) $(e).width(jGrowlWidth + 'px');
+            if (jGrowlHeight !== null && jGrowlHeight !== undefined) $(e).height(jGrowlHeight + 'px');
+        },
+        afterOpen: function (e, m) {
+            jQuery(".jGrowl-message").readmore({
+                moreLink: '<a href="#" style="display: block; width: auto; padding: 0px;text-align: right; margin-top: 10px; color: #ffffff; font-size: 0.8em">' + showAllLabel + '</a>',
+                lessLink: '<a href="#" style="display: block; width: auto; padding: 0px;text-align: right; margin-top: 10px; color: #ffffff; font-size: 0.8em">' + collapseLabel + '</a>',
 
-                    maxHeight: 75
-                });
-            },
-            speed: jGrowlSpeed
-        });
+                collapsedHeight: 75
+            });
+        },
+        speed: jGrowlSpeed
     });
 }
 
