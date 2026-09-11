@@ -57,10 +57,11 @@ Map createUpdateCustomerAndShippingAddress() {
     createUpdatePersonCtx.partyId = partyId
     Map serviceResultCUP = run service: 'createUpdatePerson', with: createUpdatePersonCtx
     partyId = serviceResultCUP.partyId
+    parameters.partyId = partyId
 
     Map partyRoleCtx = [partyId: partyId, roleTypeId: 'CUSTOMER']
     if (userLogin) {
-        if (userLogin.userLoginId == 'anonymos') {
+        if (userLogin.userLoginId == 'anonymous') {
             userLogin.partyId = partyId
         }
         partyRoleCtx.userLogin = userLogin
