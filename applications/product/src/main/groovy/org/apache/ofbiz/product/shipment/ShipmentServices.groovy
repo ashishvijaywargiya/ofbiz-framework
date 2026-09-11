@@ -776,7 +776,7 @@ Map quickShipEntireOrder() {
     }
     if (productStore.explodeOrderItems == 'Y') {
         // can't insert duplicate rows in shipmentPackageContent
-        return errorMessage(UtilProperties.getMessage('ProductUiLabels',
+        return error(UtilProperties.getMessage('ProductUiLabels',
                 'FacilityShipmentNotCreatedForExplodesOrderItems', [productStore: productStore], locale))
     }
     // locate shipping facilities associated with order item rez's
@@ -1072,16 +1072,29 @@ Map createOrderShipmentPlan () {
     // get the product store entity
     GenericValue productStore = from('ProductStore').where(productStoreId: orderHeader.productStoreId).cache().queryOne()
     List orderItemShipGroupList = orderHeader.getRelated('OrderItemShipGroup', null, null, false)
+    // group OrderItemAndShipGroupAssoc records by shipGroupSeqId so that each shipment only gets
+    // the items actually associated with its own ship group, instead of every item on the order
+    List orderItemAndShipGroupAssocList = from('OrderItemAndShipGroupAssoc')
+            .where(orderId: orderHeader.orderId)
+            .queryList()
+    Map orderItemListByShGrpMap = [:]
+    for (GenericValue orderItemAndShipGroupAssoc : orderItemAndShipGroupAssocList) {
+        orderItemListByShGrpMap.computeIfAbsent(orderItemAndShipGroupAssoc.shipGroupSeqId) { [] } << orderItemAndShipGroupAssoc
+    }
     for (GenericValue orderItemShipGroup : orderItemShipGroupList) {
+        List perShipGroupItemList = orderItemListByShGrpMap[orderItemShipGroup.shipGroupSeqId] ?: []
+        // make sure we have something to ship for this ship group; if not, skip to the next one
+        if (!perShipGroupItemList) {
+            continue
+        }
         Map serviceResult = run service: 'createShipment', with: [primaryOrderId: orderHeader.orderId,
                                                                   primaryShipGroupSeqId: orderItemShipGroup.shipGroupSeqId,
                                                                   statusId: 'SHIPMENT_INPUT',
                                                                   originFacilityId: productStore.inventoryFacilityId]
         parameters.shipmentId = serviceResult.shipmentId
         GenericValue shipment = from('Shipment').where(parameters).queryOne()
-        List orderItems = orderHeader.getRelated('OrderItem', null, null, false)
-        orderItems.each { GenericValue orderItem ->
-            GenericValue itemProduct = from('Product').where(productId: orderItem.productId).cache().queryOne()
+        perShipGroupItemList.each { GenericValue orderItemAndShipGroupAssoc ->
+            GenericValue itemProduct = from('Product').where(productId: orderItemAndShipGroupAssoc.productId).cache().queryOne()
 
             // make sure the OrderItem is for a Product that has a ProductType with isPhysical=Y
             if (itemProduct) {
@@ -1089,10 +1102,10 @@ Map createOrderShipmentPlan () {
                 if (itemProductType.isPhysical == 'Y') {
                     // Create shipment item
                     run service: 'addOrderShipmentToShipment', with: [orderId: orderHeader.orderId,
-                                                                      orderItemSeqId: orderItem.orderItemSeqId,
+                                                                      orderItemSeqId: orderItemAndShipGroupAssoc.orderItemSeqId,
                                                                       shipmentId: shipment.shipmentId,
                                                                       shipGroupSeqId: orderItemShipGroup.shipGroupSeqId,
-                                                                      quantity: orderItem.quantity]
+                                                                      quantity: orderItemAndShipGroupAssoc.quantity]
                 }
             }
         }
@@ -1342,7 +1355,7 @@ Map addOrderShipmentToShipment() {
         Map serviceResultCSI = run service: 'createShipmentItem', with: [shipmentId: parameters.shipmentId,
                                                                          productId: orderItem.productId,
                                                                          quantity: parameters.quantity]
-        parameters.shipmentItemSeqId = serviceResultCSI.shipemntItemSeqId
+        parameters.shipmentItemSeqId = serviceResultCSI.shipmentItemSeqId
         result.shipmentItemSeqId = serviceResultCSI.shipmentItemSeqId
         run service: 'createOrderShipment', with: parameters
     }
@@ -1374,7 +1387,7 @@ Map getQuantityForShipment() {
     BigDecimal totPlannedOrIssuedQuantity = issuedQuantity + plannedQuantity
     BigDecimal orderCancelQuantity = orderItem.cancelQuantity ?: BigDecimal.ZERO
 
-    result.remainingQuantity = orderCancelQuantity + totPlannedOrIssuedQuantity - orderItem.quantity
+    result.remainingQuantity = orderItem.quantity - orderCancelQuantity - totPlannedOrIssuedQuantity
     return result
 }
 
